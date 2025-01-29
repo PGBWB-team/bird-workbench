@@ -12,9 +12,8 @@ ui <- navbarPage(
              column(3, dataTableOutput("species_counts_t2")),
              column(3, dataTableOutput("species_counts_t3")),
              column(3, dataTableOutput("species_counts_t4"))
-           )
+           )),
            # dataTableOutput("species_counts")
-  ),
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -69,6 +68,7 @@ ui <- navbarPage(
      
   )
 )
+
 
 server <- function(input, output, session) {
   
@@ -339,6 +339,23 @@ server <- function(input, output, session) {
   # Pre-fetch the file list from the server during app initialization
   base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder_v2/"
   
+  # Observe the selected data and filter the original dataframe
+  # observe({
+  #   
+  #   species_folders <- paste0(species_click(), "/")
+  #   
+  #   # Combine file listings for all species
+  #   all_files <- fetch_files(species_folders)
+  #   selected_data <- event_data("plotly_selected")
+  #   
+  # })
+    
+  # base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder/"
+  # species_folders <- paste0(species, "/")
+  # 
+  # # Combine file listings for all species
+  # all_files <- fetch_files(species_folders)
+  # 
   # Observe the selected data and filter the original dataframe
   observe({
     
