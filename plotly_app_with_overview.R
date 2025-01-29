@@ -57,12 +57,7 @@ ui <- navbarPage(
                  })
                ),
                
-               accordion(
-                 accordion_panel(
-                   "Data Table",
-                   DT::dataTableOutput("filtered_data")
-                 )
-               )
+               DT::dataTableOutput("filtered_data")
              )
            )
      
