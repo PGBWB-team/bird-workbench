@@ -11,16 +11,26 @@ library(DT)
 library(bslib)
 
 # Reading in all data:
-all_data <- fst::read_fst("enter_your_path.fst")
+all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
 
 # Set species code:
 species <- "leabit"
 
-ui <- page_navbar(
-  title = paste0(unique(subset(all_data, Species.Code==species)$Common.Name), " Observations"),
+ui <- navbarPage(
+  title = "Main Observations",
+  id = "main_nav",
   bg = "darkgreen",
   inverse = TRUE,
-  nav_panel(title = "Overview",
+  tabPanel(title = "Prairie Haven Overview",
+           value = "ph_overview",
+           DTOutput("species_counts")
+  ),
+  
+  tabPanel(title = "Test",
+           value = "testing"),
+  
+  tabPanel(title = "Overview",
+           value = "species_overview",
             fluidRow(
               lapply(1:6, function(i){
                 column(width = 6,
@@ -28,7 +38,8 @@ ui <- page_navbar(
               })
             )),
   
-  nav_panel(title = "Location Drilldown",
+  tabPanel(title = "Location Drilldown",
+           value = "loc_drilldown",
             page_sidebar(
               title = paste0(unique(subset(all_data, Species.Code==species)$Common.Name), " Observations"),
               
@@ -66,7 +77,91 @@ ui <- page_navbar(
 
 
 server <- function(input, output, session) {
-  # Data processing steps 
+  
+  ###############
+  ## Functions ##
+  ###############
+  
+  # Function to create data table
+  create_table <- function(data) {
+    # Select only the 'Display' column
+    data <- data.frame(Display = data$Display)
+    
+    datatable(
+      data, 
+      escape = FALSE,
+      options = list(
+        dom = 't', # display only (no search / no pagination)
+        ordering = FALSE,
+        pageLength = nrow(data)
+      ),
+      rownames = FALSE,
+      selection = 'single'
+    )  
+  }
+  
+  # Function to fetch files for each species with error handling
+  fetch_files <- function(folder) {
+    url <- paste0(base_url, folder)
+    
+    # Attempt to fetch the HTML content
+    tryCatch({
+      page <- rvest::read_html(url)
+      files <- page %>% html_nodes("a") %>% html_attr("href")
+      
+      # Check if files are empty
+      if (length(files) == 0) {
+        warning(paste("No files found in folder:", folder))
+        return(character(0))  # Return an empty character vector
+      }
+      
+      return(files)
+    }, error = function(e) {
+      warning(paste("Error fetching files for folder:", folder, "-", e$message))
+      return(character(0))  # Return an empty character vector in case of error
+    })
+  }
+  
+  # Function for determining date range
+  get_week_date_range <- function(year, week) {
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
+    
+    # Calculate the start date of the target week
+    start_date <- first_sunday + (week - 1) * 7
+    
+    # Calculate the end date of the target week
+    end_date <- start_date + 6
+    
+    # Format the date range
+    paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
+  }
+  
+  ##################################################                                        
+  ## Data Processing: Prairie Haven Overview Page ##
+  ##################################################                                                                                
+  
+  # New df of total count by species:
+  count_by_species <- all_data %>% count(Common.Name, Species.Code)
+  
+  # Create display column that contains count and species name
+  count_by_species$Display <- paste(count_by_species$Common.Name, "<br>", count_by_species$n, sep = "")
+  
+  # # Calculate the number of rows per column 
+  # rows_per_column <- ceiling(nrow(count_by_species) / 4)
+  # 
+  # # Split the data into three parts
+  # column1 <- count_by_species[1:rows_per_column, ]
+  # column2 <- count_by_species[(rows_per_column + 1):(2 * rows_per_column), ]
+  # column3 <- count_by_species[(2 * rows_per_column + 1):(3 * rows_per_column), ]
+  # column4 <- count_by_species[(3 * rows_per_column + 1):nrow(count_by_species), ]
+  # 
+  ################################################
+  ## Data Processing: Species-Specific Overview ##
+  ################################################
   
   # Subset by species:
   species_data <- subset(all_data, Species.Code==species)
@@ -92,36 +187,12 @@ server <- function(input, output, session) {
     mutate(YearlyCount = n()) %>%
     ungroup()
   
-  # Accessing sound files
-  # Pre-fetch the file list from the server during app initialization
-  base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder/"
-  species_folders <- paste0(species, "/")
-  
-  # Function to fetch files for each species with error handling
-  fetch_files <- function(folder) {
-    url <- paste0(base_url, folder)
-    
-    # Attempt to fetch the HTML content
-    tryCatch({
-      page <- rvest::read_html(url)
-      files <- page %>% html_nodes("a") %>% html_attr("href")
-      
-      # Check if files are empty
-      if (length(files) == 0) {
-        warning(paste("No files found in folder:", folder))
-        return(character(0))  # Return an empty character vector
-      }
-      
-      return(files)
-    }, error = function(e) {
-      warning(paste("Error fetching files for folder:", folder, "-", e$message))
-      return(character(0))  # Return an empty character vector in case of error
-    })
-  }
-  
-  # Combine file listings for all species
-  all_files <- fetch_files(species_folders)
-  
+  # Calculate the global maximum count to be used as y-axis limit in freqpoly plots
+  global_max <- species_data %>%
+    group_by(Location, Week) %>%
+    summarise(Count = n(), .groups = "drop") %>%
+    summarise(MaxCount = max(Count)) %>%
+    pull(MaxCount)
   
   # List of locations
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
@@ -133,30 +204,64 @@ server <- function(input, output, session) {
             "2023" = "#C77CFF",
             "2024" = "#E68613")
   
-  # Function for determining date range
-  get_week_date_range <- function(year, week) {
-    # Get the first day of the year
-    first_day <- as.Date(paste0(year, "-01-01"))
-    
-    # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
-    
-    # Calculate the start date of the target week
-    start_date <- first_sunday + (week - 1) * 7
-    
-    # Calculate the end date of the target week
-    end_date <- start_date + 6
-    
-    # Format the date range
-    paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
-  }
+  ###################################################
+  ## Data Processing: Species / Location Drilldown ##
+  ###################################################
   
-  # Calculate the global maximum count to be used as y-axis limit in freqpoly plots
-  global_max <- species_data %>%
-    group_by(Location, Week) %>%
-    summarise(Count = n(), .groups = "drop") %>%
-    summarise(MaxCount = max(Count)) %>%
-    pull(MaxCount)
+  # Pre-fetch the file list from the server during app initialization
+  base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder/"
+  species_folders <- paste0(species, "/")
+  
+  # Combine file listings for all species
+  all_files <- fetch_files(species_folders)
+  
+  ###############################################
+  ## Application Build: Prairie Haven Overview ##
+  ###############################################
+  
+  # Render the 3 tables (aka the three columns of data)
+  output$species_counts <- renderDT({ 
+    datatable(count_by_species, selection = "single", options = list(dom = "t")) 
+    })
+  
+  # Observe clicks on the tables
+  observeEvent(input$species_counts_rows_selected, {
+    selected_row <- input$species_counts_rows_selected
+    if (!is.null(selected_row)) {
+      print(paste("Switching to overview for row:", selected_row))
+      nav_show(id="main_nav", target = "testing")
+    }
+  })
+   
+  # observeEvent(input$table2_cell_clicked, {
+  #   info <- input$table2_cell_clicked
+  #   if (!is.null(info$value)) {
+  #     species_code <- column2$Species.Code[info$row]
+  #     print(paste("Updating navbar to 'overview' for species code:", species_code))
+  #     updateNavbarPage(session=session, inputId = "main_nav",
+  #                      selected = "species_overview")
+  #   }
+  # })
+  # 
+  # observeEvent(input$table3_cell_clicked, {
+  #   info <- input$table3_cell_clicked
+  #   if (!is.null(info$value)) {
+  #     species_code <- column3$Species.Code[info$row]
+  #     print(paste("Updating navbar to 'overview' for species code:", species_code))
+  #     updateNavbarPage(session=session, inputId = "main_nav",
+  #                      selected = "species_overview")
+  #   }
+  # })
+  # 
+  # observeEvent(input$table4_cell_clicked, {
+  #   info <- input$table4_cell_clicked
+  #   if (!is.null(info$value)) {
+  #     species_code <- column4$Species.Code[info$row]
+  #     print(paste("Updating navbar to 'overview' for species code:", species_code))
+  #     updateNavbarPage(session=session, inputId = "main_nav",
+  #                      selected = "species_overview")
+  #   }
+  # })
   
   # Placeholder for filtered data
   filtered_data <- reactiveVal(NULL)
