@@ -1,3 +1,14 @@
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+library(shiny)
+library(plotly)
+library(stringr)
+library(rvest)
+library(DT)
+library(bslib)
+
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
 
@@ -7,12 +18,17 @@ ui <- navbarPage(
   selected = "ph_overview",
   tabPanel(title = "Prairie Haven Overview",
            value = "ph_overview",
-           fluidRow(
-             column(3, dataTableOutput("species_counts_t1")),
-             column(3, dataTableOutput("species_counts_t2")),
-             column(3, dataTableOutput("species_counts_t3")),
-             column(3, dataTableOutput("species_counts_t4"))
-           )),
+           selectInput(inputId = "sel_view", 
+                       label = "View Selection",
+                       choices = list("Species Totals" = "totals", "Species by Month" = "by_month"),
+                       selected = "totals"),
+          uiOutput("overview_view")),
+           # fluidRow(
+           #   column(3, dataTableOutput("species_counts_t1")),
+           #   column(3, dataTableOutput("species_counts_t2")),
+           #   column(3, dataTableOutput("species_counts_t3")),
+           #   column(3, dataTableOutput("species_counts_t4"))
+           # )),
            # dataTableOutput("species_counts")
   
   tabPanel(title = "Species-Specific Overview",
@@ -106,12 +122,28 @@ server <- function(input, output, session) {
     )
   }
   
-  # Render the tables
-  output$species_counts_t1 <- renderDataTable({ create_table(col1) })
-  output$species_counts_t2 <- renderDataTable({ create_table(col2) })
-  output$species_counts_t3 <- renderDataTable({ create_table(col3) })
-  output$species_counts_t4 <- renderDataTable({ create_table(col4) })
+  observe({
+    output$species_counts_t1 <- renderDataTable({ create_table(col1) })
+    output$species_counts_t2 <- renderDataTable({ create_table(col2) })
+    output$species_counts_t3 <- renderDataTable({ create_table(col3) })
+    output$species_counts_t4 <- renderDataTable({ create_table(col4) })
+  })
   
+  output$overview_view <- renderUI({
+    if (input$sel_view == "totals") {
+      
+      fluidRow(
+        column(3, DT::dataTableOutput("species_counts_t1")),
+        column(3, DT::dataTableOutput("species_counts_t2")),
+        column(3, DT::dataTableOutput("species_counts_t3")),
+        column(3, DT::dataTableOutput("species_counts_t4"))
+      )
+    
+    } else {
+      renderDataTable({ create_table(col2) })
+    }
+  })
+
   # Observe clicks on the tables
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
