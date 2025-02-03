@@ -122,6 +122,20 @@ server <- function(input, output, session) {
     )
   }
   
+  # Pivot table:
+  species_by_month <- all_data %>%
+    mutate(Date = as.Date(Date), Month = month(Date)) %>%
+    group_by(Common.Name, Month) %>%
+    summarize(Count_by_Species = n()) %>%
+    pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+    select(Common.Name, as.character(1:12)) %>%
+    rename_with( ~ month.name[as.numeric(.)], -Common.Name)
+  
+  # Observe Data Tables
+  observe({
+    output$species_by_month_pivot <- renderDataTable(species_by_month)
+  })
+  
   observe({
     output$species_counts_t1 <- renderDataTable({ create_table(col1) })
     output$species_counts_t2 <- renderDataTable({ create_table(col2) })
@@ -129,6 +143,7 @@ server <- function(input, output, session) {
     output$species_counts_t4 <- renderDataTable({ create_table(col4) })
   })
   
+  # Dynamic UI based on selection
   output$overview_view <- renderUI({
     if (input$sel_view == "totals") {
       
@@ -140,11 +155,20 @@ server <- function(input, output, session) {
       )
     
     } else {
-      renderDataTable({ create_table(col2) })
+      DT::dataTableOutput("species_by_month_pivot")
     }
   })
 
   # Observe clicks on the tables
+  observeEvent(input$species_by_month_pivot_cells_selected, {
+    selected_row <- input$species_by_month_pivot_cells_selected
+    if (!is.null(selected_row)) {
+      new_species <- col1$Species.Code[selected_row]
+      species_click(new_species) # Update the reactive value
+      updateNavbarPage(session, "main_nav", selected = "species_overview")
+    }
+  })
+  
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
     if (!is.null(selected_row)) {
