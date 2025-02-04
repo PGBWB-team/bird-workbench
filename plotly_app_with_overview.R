@@ -122,18 +122,36 @@ server <- function(input, output, session) {
     )
   }
   
+  create_table_pivot <- function(data) {
+    datatable(
+      data.frame(Common.Name = data$Common.Name,
+                 January = data$January, February = data$February, March = data$March, April = data$April,
+                 May = data$May, June = data$June, July = data$July, August = data$August, 
+                 September = data$September, October = data$October, November = data$November, December = data$December),
+      escape = FALSE,
+      options = list(
+        dom = "t",
+        ordering = FALSE,
+        page_length = nrow(data), 
+        lengthMenu = list(c(nrow(data)), c("All"))
+      ),
+      rownames = FALSE,
+      selection = list(mode = "single", target = "cell")
+    )
+  }
+  
   # Pivot table:
   species_by_month <- all_data %>%
     mutate(Date = as.Date(Date), Month = month(Date)) %>%
-    group_by(Common.Name, Month) %>%
+    group_by(Common.Name, Species.Code, Month) %>%
     summarize(Count_by_Species = n()) %>%
     pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-    select(Common.Name, as.character(1:12)) %>%
-    rename_with( ~ month.name[as.numeric(.)], -Common.Name)
+    select(Common.Name, Species.Code, as.character(1:12)) %>%
+    rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
   
   # Observe Data Tables
   observe({
-    output$species_by_month_pivot <- renderDataTable(species_by_month)
+    output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month) })
   })
   
   observe({
@@ -163,7 +181,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_month_pivot_cells_selected, {
     selected_row <- input$species_by_month_pivot_cells_selected
     if (!is.null(selected_row)) {
-      new_species <- col1$Species.Code[selected_row]
+      new_species <- species_by_month$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
     }
