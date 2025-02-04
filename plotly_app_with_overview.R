@@ -23,13 +23,6 @@ ui <- navbarPage(
                        choices = list("Species Totals" = "totals", "Species by Month" = "by_month"),
                        selected = "totals"),
           uiOutput("overview_view")),
-           # fluidRow(
-           #   column(3, dataTableOutput("species_counts_t1")),
-           #   column(3, dataTableOutput("species_counts_t2")),
-           #   column(3, dataTableOutput("species_counts_t3")),
-           #   column(3, dataTableOutput("species_counts_t4"))
-           # )),
-           # dataTableOutput("species_counts")
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -180,7 +173,7 @@ server <- function(input, output, session) {
   # Observe clicks on the tables
   observeEvent(input$species_by_month_pivot_cells_selected, {
     selected_row <- input$species_by_month_pivot_cells_selected
-    if (!is.null(selected_row)) {
+    if (nrow(selected_row) > 0) {
       new_species <- species_by_month$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
@@ -189,7 +182,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
-    if (!is.null(selected_row)) {
+    if (nrow(selected_row) > 0) {
       new_species <- col1$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
@@ -198,7 +191,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$species_counts_t2_cells_selected, {
     selected_row <- input$species_counts_t2_cells_selected
-    if (!is.null(selected_row)) {
+    if (nrow(selected_row) > 0) {
       new_species <- col2$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
@@ -207,7 +200,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$species_counts_t3_cells_selected, {
     selected_row <- input$species_counts_t3_cells_selected
-    if (!is.null(selected_row)) {
+    if (nrow(selected_row) > 0) {
       new_species <- col3$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
@@ -216,7 +209,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$species_counts_t4_cells_selected, {
     selected_row <- input$species_counts_t4_cells_selected
-    if (!is.null(selected_row)) {
+    if (nrow(selected_row) > 0) {
       new_species <- col4$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
