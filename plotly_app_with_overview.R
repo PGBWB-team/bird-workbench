@@ -19,7 +19,7 @@ ui <- navbarPage(
   tabPanel(title = "Prairie Haven Overview",
            value = "ph_overview",
            selectInput(inputId = "sel_view", 
-                       label = "View Selection",
+                       label = h3("View Selection"),
                        choices = list("Species Totals" = "totals", "Species by Month" = "by_month"),
                        selected = "totals"),
           uiOutput("overview_view")),
@@ -133,18 +133,38 @@ server <- function(input, output, session) {
     )
   }
   
-  # Pivot table:
-  species_by_month <- all_data %>%
-    mutate(Date = as.Date(Date), Month = month(Date)) %>%
-    group_by(Common.Name, Species.Code, Month) %>%
-    summarize(Count_by_Species = n()) %>%
-    pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-    select(Common.Name, Species.Code, as.character(1:12)) %>%
-    rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
+  create_pivot <- function(df, yr_input="All") {
+    if (yr_input == "All") {
+      out_df <- df %>%
+        mutate(Date = as.Date(Date), Month = month(Date)) %>%
+        group_by(Common.Name, Species.Code, Month) %>%
+        summarize(Count_by_Species = n()) %>%
+        pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+        select(Common.Name, Species.Code, as.character(1:12)) %>%
+        rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
+      return(out_df)
+    } else {
+      out_df <- df %>%
+        filter(lubridate::year(as.Date(Date)) == yr_input) %>%
+        mutate(Date = as.Date(Date), Month = month(Date)) %>%
+        group_by(Common.Name, Species.Code, Month) %>%
+        summarize(Count_by_Species = n()) %>%
+        pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+        select(Common.Name, Species.Code, as.character(1:12)) %>%
+        rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
+      return(out_df)
+    }
+  }
   
+  # Reactive expression for species_by_month based on year selection
+  species_by_month <- reactive({
+    req(input$year_sel)  # Ensure input exists before proceeding
+    create_pivot(all_data, input$year_sel)
+  })
+
   # Observe Data Tables
   observe({
-    output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month) })
+    output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month()) })
   })
   
   observe({
@@ -166,7 +186,21 @@ server <- function(input, output, session) {
       )
     
     } else {
-      DT::dataTableOutput("species_by_month_pivot")
+      
+      # Creating valid choices for year filtering
+      year_vals <- unique(as.character(lubridate::year(all_data$Date)))
+      year_vals <- as.list(year_vals[order(year_vals)])
+      names(year_vals) <- as.list(year_vals)
+      year_vals <- c(year_vals, "All"="All")
+      
+      tagList(
+        selectInput("year_sel", 
+                    label = "Year Selection", 
+                    choices = year_vals,
+                    selected = "All"),
+        DT::dataTableOutput("species_by_month_pivot")
+      )
+
     }
   })
 
@@ -174,7 +208,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_month_pivot_cells_selected, {
     selected_row <- input$species_by_month_pivot_cells_selected
     if (nrow(selected_row) > 0) {
-      new_species <- species_by_month$Species.Code[selected_row]
+      new_species <- species_by_month()$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
     }
