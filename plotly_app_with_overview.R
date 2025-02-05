@@ -319,6 +319,24 @@ server <- function(input, output, session) {
     }
   })
   
+  observeEvent(input$species_by_location_pivot_cells_selected, {
+    selected_row <- input$species_by_location_pivot_cells_selected
+    if (nrow(selected_row) > 0) {
+      new_species <- species_by_location()$Species.Code[selected_row]
+      species_click(new_species) # Update the reactive value
+      updateNavbarPage(session, "main_nav", selected = "species_overview")
+    }
+  })
+  
+  observeEvent(input$species_by_year_pivot_cells_selected, {
+    selected_row <- input$species_by_year_pivot_cells_selected
+    if (nrow(selected_row) > 0) {
+      new_species <- species_by_year()$Species.Code[selected_row]
+      species_click(new_species) # Update the reactive value
+      updateNavbarPage(session, "main_nav", selected = "species_overview")
+    }
+  })
+  
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
     if (nrow(selected_row) > 0) {
