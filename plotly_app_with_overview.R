@@ -558,23 +558,11 @@ server <- function(input, output, session) {
   # Pre-fetch the file list from the server during app initialization
   base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder_v2/"
   
-  # Observe the selected data and filter the original dataframe
-  # observe({
-  #   
-  #   species_folders <- paste0(species_click(), "/")
-  #   
-  #   # Combine file listings for all species
-  #   all_files <- fetch_files(species_folders)
-  #   selected_data <- event_data("plotly_selected")
-  #   
-  # })
-    
-  # base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder/"
-  # species_folders <- paste0(species, "/")
-  # 
-  # # Combine file listings for all species
-  # all_files <- fetch_files(species_folders)
-  # 
+  # Function to create sound button
+  shinyInput <- function(FUN, id, ...) {
+      as.character(FUN(paste0(id), ...))
+  }
+
   # Observe the selected data and filter the original dataframe
   observe({
     
@@ -583,11 +571,6 @@ server <- function(input, output, session) {
     # Combine file listings for all species
     all_files <- fetch_files(species_folders)
     selected_data <- event_data("plotly_selected")
-    
-    if (!is.null(selected_data)) {
-      # Extract the selected weeks (x-values of bars clicked)
-      selected_weeks <- selected_data$x
-    }
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
@@ -658,7 +641,28 @@ server <- function(input, output, session) {
               } else {
                 "No File"
               }
-            }
+            },
+            
+            Sound.Button = list({
+              shinyInput(
+                FUN = actionButton,
+                id = paste0('play_sound_',Begin.Path),
+                label = "Play Sound", 
+                onclick = 'Shiny.setInputValue(\"select_button\", this.id, {priority: \"event\"})'
+              )
+            }),
+            
+            # print(Sound.Button),
+            # print(dim(Sound.Button)),
+            
+            Spectrogram.Button = list({
+              shinyInput(
+                FUN = actionButton, 
+                id = paste0('show_spectrogram_', Begin.Path),
+                label = "Show Spectrogram",
+                onclick = 'Shiny.setInputValue(\"select_button\", this.id, {priority: \"event\"})'
+              )
+            })
           ) %>%
           ungroup()
         
