@@ -734,7 +734,9 @@ server <- function(input, output, session) {
     # Read wav file
     temp_wav <- tuneR::readWave(dest_path)
 
-    spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15))
+    # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
+    v <- ggspectro(temp_wav, ovlp=50)
+    v + geom_tile(aes(fill = amplitude))
 
   })
   
