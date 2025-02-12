@@ -9,6 +9,7 @@ library(rvest)
 library(DT)
 library(bslib)
 library(tuneR)
+library(seewave)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -59,6 +60,7 @@ ui <- navbarPage(
              ),
              
              mainPanel(
+               uiOutput("species_title"),
                tabsetPanel(
                  !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
                    tabPanel(
@@ -479,6 +481,13 @@ server <- function(input, output, session) {
     })
   }
   
+  output$species_title <- renderUI({
+    name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
+    # name_title <- unique(species_data$Common.Name)
+    print(h3(name_title))
+    # print(h3(species_click()))
+  })
+  
   for (i in seq_along(location_list)) {
     local({
       loc <- location_list[i]
@@ -678,6 +687,9 @@ server <- function(input, output, session) {
               }
             })
           ) %>%
+          select("Sound.Button", "Spectrogram.Button", "Website", "Confidence", 
+                 "Begin.Time..s.", "End.Time..s.", "Week", 
+                 "Location", "Begin.Path", "Species.Code") %>%
           ungroup()
         
         datatable(out_df, escape = FALSE)
