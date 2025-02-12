@@ -8,6 +8,7 @@ library(stringr)
 library(rvest)
 library(DT)
 library(bslib)
+library(tuneR)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -68,7 +69,8 @@ ui <- navbarPage(
                ),
                
                DT::dataTableOutput("filtered_data"),
-               textOutput('myText')
+               uiOutput("audio_player"),
+               plotOutput("spectrogram")
                
              )
            )
@@ -586,8 +588,7 @@ server <- function(input, output, session) {
       match <- species_files[str_detect(species_files, pattern)]
       if (length(match) == 1) {
         return(paste0(
-          "<a href='", URLencode(folder_url), row[["Species.Code"]],"/", match,
-          "' target=`_blank'>Open Sound File</a>")
+          URLencode(folder_url), row[["Species.Code"]],"/", match)
         )
       } else {
         return(NULL)
@@ -646,24 +647,6 @@ server <- function(input, output, session) {
               "&mediaType=audio&sort=rating_rank_desc",
               "' target='_blank'>Open Bird Guide</a>"
             ),
-            Sound.File = {
-              # Create the regex pattern for the current row
-              pattern <- paste0(
-                "^", as.character(round(as.numeric(Confidence), digits=3)), "_[0-9]+_", gsub(".wav", "", basename(Begin.Path)),
-                "_", Begin.Time..s., "s_", End.Time..s., "s.wav", "$"
-              )
-              
-              # Find matching file
-              match <- all_files[str_detect(all_files, pattern)]
-              if (length(match) == 1) {
-                paste0(
-                  "<a href='", URLencode(base_url), Species.Code,"/", match,
-                  "' target=`_blank'>Open Sound File</a>"
-                )
-              } else {
-                "No File"
-              }
-            },
             
             Sound.Button = list({
               audio_id <- find_audio(.data, all_files, base_url)
@@ -681,12 +664,18 @@ server <- function(input, output, session) {
             }),
             
             Spectrogram.Button = list({
-              shinyInput(
-                FUN = actionButton, 
-                id = paste0('show_spectrogram_', Begin.Path),
-                label = "Show Spectrogram",
-                onclick = 'Shiny.setInputValue(\"spectrogram_button\", this.id, {priority: \"event\"})'
-              )
+              audio_id <- find_audio(.data, all_files, base_url)
+              if (!is.null(audio_id)) {
+                shinyInput(
+                  FUN = actionButton,
+                  id = audio_id,
+                  label = "Display Spectrogram", 
+                  onclick = 'Shiny.setInputValue(\"spectrogram_button\", this.id, {priority: \"event\"})'
+                )
+              }
+              else {
+                "No Audio File"
+              }
             })
           ) %>%
           ungroup()
@@ -699,25 +688,51 @@ server <- function(input, output, session) {
   })
   
   play_recording <- eventReactive(input$play_button, {
-    # take the value of input$select_button, e.g. "button_1"
-    # get the button number (1) and assign to selectedRow
-    selectedRow <- input$play_button
+    # define the temporary directory and download the data
+    if (!dir.exists("www")) {
+      dir.create("www")
+    }
     
-    # get the value of the "Name" column in the data.frame for that row
-    paste('click on ', selectedRow)
+    dest_path <- file.path("www", "temp_sound.wav")
+    
+    # Delete previous file if it exists
+    if (file.exists(dest_path)) file.remove(dest_path)
+    
+    # take the value of input$select_button
+    selectedRow <- input$play_button
+    download.file(selectedRow, destfile = dest_path, mode = "wb")
+    
+    audio_src <- "temp_sound.wav"
+    
+    # Return an audio player element
+    tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA)
+
   })
   
   show_spectrogram <- eventReactive(input$spectrogram_button, {
-    selectedRow <- inpuyt$spectrogram_button
+    dest_path <- file.path(tempdir(), "temp_sound_spec.wav")
     
-    paste('click on ', selectedRow)
+    # Delete previous file if it exists
+    if (file.exists(dest_path)) file.remove(dest_path)
+    
+    # Take the value of input$select_button and download file
+    selectedRow <- input$spectrogram_button
+    download.file(selectedRow, destfile = dest_path, mode = "wb")
+    
+    # Read wav file
+    temp_wav <- tuneR::readWave(dest_path)
+
+    spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15))
+
   })
   
   # Show the name of the employee that has been clicked on
-  output$myText <- renderText({
-    
+  output$audio_player <- renderUI({
     play_recording()
-    
+  })
+  
+  output$spectrogram <- renderPlot({
+    show_spectrogram()
   })
   
   
