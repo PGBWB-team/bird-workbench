@@ -67,7 +67,9 @@ ui <- navbarPage(
                  })
                ),
                
-               DT::dataTableOutput("filtered_data")
+               DT::dataTableOutput("filtered_data"),
+               textOutput('myText')
+               
              )
            )
      
@@ -562,6 +564,7 @@ server <- function(input, output, session) {
   shinyInput <- function(FUN, id, ...) {
       as.character(FUN(paste0(id), ...))
   }
+  
 
   # Observe the selected data and filter the original dataframe
   observe({
@@ -571,6 +574,25 @@ server <- function(input, output, session) {
     # Combine file listings for all species
     all_files <- fetch_files(species_folders)
     selected_data <- event_data("plotly_selected")
+    
+    find_audio <- function(row, species_files, folder_url) {
+      # Create the regex pattern for the current row
+      pattern <- paste0(
+        "^", as.character(round(as.numeric(row[["Confidence"]]), digits=3)), "_[0-9]+_", gsub(".wav", "", basename(row[["Begin.Path"]])),
+        "_", row[["Begin.Time..s."]], "s_", row[["End.Time..s."]], "s.wav", "$"
+      )
+      
+      # Find matching file
+      match <- species_files[str_detect(species_files, pattern)]
+      if (length(match) == 1) {
+        return(paste0(
+          "<a href='", URLencode(folder_url), row[["Species.Code"]],"/", match,
+          "' target=`_blank'>Open Sound File</a>")
+        )
+      } else {
+        return(NULL)
+      }
+    }
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
@@ -644,23 +666,26 @@ server <- function(input, output, session) {
             },
             
             Sound.Button = list({
-              shinyInput(
-                FUN = actionButton,
-                id = paste0('play_sound_',Begin.Path),
-                label = "Play Sound", 
-                onclick = 'Shiny.setInputValue(\"select_button\", this.id, {priority: \"event\"})'
-              )
+              audio_id <- find_audio(.data, all_files, base_url)
+              if (!is.null(audio_id)) {
+                shinyInput(
+                  FUN = actionButton,
+                  id = audio_id,
+                  label = "Play Sound", 
+                  onclick = 'Shiny.setInputValue(\"play_button\", this.id, {priority: \"event\"})'
+                )
+              }
+              else {
+                "No Audio File"
+              }
             }),
-            
-            # print(Sound.Button),
-            # print(dim(Sound.Button)),
             
             Spectrogram.Button = list({
               shinyInput(
                 FUN = actionButton, 
                 id = paste0('show_spectrogram_', Begin.Path),
                 label = "Show Spectrogram",
-                onclick = 'Shiny.setInputValue(\"select_button\", this.id, {priority: \"event\"})'
+                onclick = 'Shiny.setInputValue(\"spectrogram_button\", this.id, {priority: \"event\"})'
               )
             })
           ) %>%
@@ -671,6 +696,28 @@ server <- function(input, output, session) {
         data.frame()
       }
     })
+  })
+  
+  play_recording <- eventReactive(input$play_button, {
+    # take the value of input$select_button, e.g. "button_1"
+    # get the button number (1) and assign to selectedRow
+    selectedRow <- input$play_button
+    
+    # get the value of the "Name" column in the data.frame for that row
+    paste('click on ', selectedRow)
+  })
+  
+  show_spectrogram <- eventReactive(input$spectrogram_button, {
+    selectedRow <- inpuyt$spectrogram_button
+    
+    paste('click on ', selectedRow)
+  })
+  
+  # Show the name of the employee that has been clicked on
+  output$myText <- renderText({
+    
+    play_recording()
+    
   })
   
   
