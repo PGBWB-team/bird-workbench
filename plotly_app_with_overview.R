@@ -8,6 +8,8 @@ library(stringr)
 library(rvest)
 library(DT)
 library(bslib)
+library(tuneR)
+library(seewave)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -58,6 +60,7 @@ ui <- navbarPage(
              ),
              
              mainPanel(
+               uiOutput("species_title"),
                tabsetPanel(
                  !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
                    tabPanel(
@@ -67,7 +70,10 @@ ui <- navbarPage(
                  })
                ),
                
-               DT::dataTableOutput("filtered_data")
+               DT::dataTableOutput("filtered_data"),
+               uiOutput("audio_player"),
+               plotOutput("spectrogram")
+               
              )
            )
      
@@ -475,6 +481,13 @@ server <- function(input, output, session) {
     })
   }
   
+  output$species_title <- renderUI({
+    name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
+    # name_title <- unique(species_data$Common.Name)
+    print(h3(name_title))
+    # print(h3(species_click()))
+  })
+  
   for (i in seq_along(location_list)) {
     local({
       loc <- location_list[i]
@@ -558,23 +571,12 @@ server <- function(input, output, session) {
   # Pre-fetch the file list from the server during app initialization
   base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder_v2/"
   
-  # Observe the selected data and filter the original dataframe
-  # observe({
-  #   
-  #   species_folders <- paste0(species_click(), "/")
-  #   
-  #   # Combine file listings for all species
-  #   all_files <- fetch_files(species_folders)
-  #   selected_data <- event_data("plotly_selected")
-  #   
-  # })
-    
-  # base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder/"
-  # species_folders <- paste0(species, "/")
-  # 
-  # # Combine file listings for all species
-  # all_files <- fetch_files(species_folders)
-  # 
+  # Function to create sound button
+  shinyInput <- function(FUN, id, ...) {
+      as.character(FUN(paste0(id), ...))
+  }
+  
+
   # Observe the selected data and filter the original dataframe
   observe({
     
@@ -584,9 +586,22 @@ server <- function(input, output, session) {
     all_files <- fetch_files(species_folders)
     selected_data <- event_data("plotly_selected")
     
-    if (!is.null(selected_data)) {
-      # Extract the selected weeks (x-values of bars clicked)
-      selected_weeks <- selected_data$x
+    find_audio <- function(row, species_files, folder_url) {
+      # Create the regex pattern for the current row
+      pattern <- paste0(
+        "^", as.character(round(as.numeric(row[["Confidence"]]), digits=3)), "_[0-9]+_", gsub(".wav", "", basename(row[["Begin.Path"]])),
+        "_", row[["Begin.Time..s."]], "s_", row[["End.Time..s."]], "s.wav", "$"
+      )
+      
+      # Find matching file
+      match <- species_files[str_detect(species_files, pattern)]
+      if (length(match) == 1) {
+        return(paste0(
+          URLencode(folder_url), row[["Species.Code"]],"/", match)
+        )
+      } else {
+        return(NULL)
+      }
     }
     
     # filter data based on the selected bin center
@@ -641,25 +656,40 @@ server <- function(input, output, session) {
               "&mediaType=audio&sort=rating_rank_desc",
               "' target='_blank'>Open Bird Guide</a>"
             ),
-            Sound.File = {
-              # Create the regex pattern for the current row
-              pattern <- paste0(
-                "^", as.character(round(as.numeric(Confidence), digits=3)), "_[0-9]+_", gsub(".wav", "", basename(Begin.Path)),
-                "_", Begin.Time..s., "s_", End.Time..s., "s.wav", "$"
-              )
-              
-              # Find matching file
-              match <- all_files[str_detect(all_files, pattern)]
-              if (length(match) == 1) {
-                paste0(
-                  "<a href='", URLencode(base_url), Species.Code,"/", match,
-                  "' target=`_blank'>Open Sound File</a>"
+            
+            Sound.Button = list({
+              audio_id <- find_audio(.data, all_files, base_url)
+              if (!is.null(audio_id)) {
+                shinyInput(
+                  FUN = actionButton,
+                  id = audio_id,
+                  label = "Play Sound", 
+                  onclick = 'Shiny.setInputValue(\"play_button\", this.id, {priority: \"event\"})'
                 )
-              } else {
-                "No File"
               }
-            }
+              else {
+                "No Audio File"
+              }
+            }),
+            
+            Spectrogram.Button = list({
+              audio_id <- find_audio(.data, all_files, base_url)
+              if (!is.null(audio_id)) {
+                shinyInput(
+                  FUN = actionButton,
+                  id = audio_id,
+                  label = "Display Spectrogram", 
+                  onclick = 'Shiny.setInputValue(\"spectrogram_button\", this.id, {priority: \"event\"})'
+                )
+              }
+              else {
+                "No Audio File"
+              }
+            })
           ) %>%
+          select("Sound.Button", "Spectrogram.Button", "Website", "Confidence", 
+                 "Begin.Time..s.", "End.Time..s.", "Week", 
+                 "Location", "Begin.Path", "Species.Code") %>%
           ungroup()
         
         datatable(out_df, escape = FALSE)
@@ -667,6 +697,56 @@ server <- function(input, output, session) {
         data.frame()
       }
     })
+  })
+  
+  play_recording <- eventReactive(input$play_button, {
+    # define the temporary directory and download the data
+    if (!dir.exists("www")) {
+      dir.create("www")
+    }
+    
+    dest_path <- file.path("www", "temp_sound.wav")
+    
+    # Delete previous file if it exists
+    if (file.exists(dest_path)) file.remove(dest_path)
+    
+    # take the value of input$select_button
+    selectedRow <- input$play_button
+    download.file(selectedRow, destfile = dest_path, mode = "wb")
+    
+    audio_src <- "temp_sound.wav"
+    
+    # Return an audio player element
+    tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA)
+
+  })
+  
+  show_spectrogram <- eventReactive(input$spectrogram_button, {
+    dest_path <- file.path(tempdir(), "temp_sound_spec.wav")
+    
+    # Delete previous file if it exists
+    if (file.exists(dest_path)) file.remove(dest_path)
+    
+    # Take the value of input$select_button and download file
+    selectedRow <- input$spectrogram_button
+    download.file(selectedRow, destfile = dest_path, mode = "wb")
+    
+    # Read wav file
+    temp_wav <- tuneR::readWave(dest_path)
+
+    # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
+    v <- ggspectro(temp_wav, ovlp=50)
+    v + geom_tile(aes(fill = amplitude))
+
+  })
+  
+  # Show the name of the employee that has been clicked on
+  output$audio_player <- renderUI({
+    play_recording()
+  })
+  
+  output$spectrogram <- renderPlot({
+    show_spectrogram()
   })
   
   
