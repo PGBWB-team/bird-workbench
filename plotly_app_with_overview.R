@@ -10,6 +10,8 @@ library(DT)
 library(bslib)
 library(tuneR)
 library(seewave)
+library(av)
+library(viridisLite)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -584,24 +586,6 @@ server <- function(input, output, session) {
     all_files <- fetch_files(species_folders)
     selected_data <- event_data("plotly_selected")
     
-    # find_audio <- function(row, species_files, folder_url) {
-    #   # Create the regex pattern for the current row
-    #   pattern <- paste0(
-    #     "^", as.character(round(as.numeric(row[["Confidence"]]), digits=3)), "_[0-9]+_", gsub(".wav", "", basename(row[["Begin.Path"]])),
-    #     "_", row[["Begin.Time..s."]], "s_", row[["End.Time..s."]], "s.wav", "$"
-    #   )
-    #   
-    #   # Find matching file
-    #   match <- species_files[str_detect(species_files, pattern)]
-    #   if (length(match) == 1) {
-    #     return(paste0(
-    #       URLencode(folder_url), row[["Species.Code"]],"/", match)
-    #     )
-    #   } else {
-    #     return(NULL)
-    #   }
-    # }
-    
     find_audio_file <- function(row) {
       
       file_name <- basename(row[["Begin.Path"]])
@@ -705,6 +689,7 @@ server <- function(input, output, session) {
                 "No Audio File"
               }
             })
+            
           ) %>%
           select("Sound.Button", "Spectrogram.Button", "Website", "Confidence", 
                  "Begin.Time..s.", "End.Time..s.", "Week", 
@@ -776,51 +761,10 @@ server <- function(input, output, session) {
     
     # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
     v <- ggspectro(audio_wav, ovlp=50)
-    v + geom_tile(aes(fill = amplitude))
+    v + geom_tile(aes(fill = amplitude)) +
+      scale_fill_gradientn(colours = viridis(256, option = "B"))
     
   })
-  
-  # play_recording <- eventReactive(input$play_button, {
-  #   # define the temporary directory and download the data
-  #   if (!dir.exists("www")) {
-  #     dir.create("www")
-  #   }
-  #   
-  #   dest_path <- file.path("www", "temp_sound.wav")
-  #   
-  #   # Delete previous file if it exists
-  #   if (file.exists(dest_path)) file.remove(dest_path)
-  #   
-  #   # take the value of input$select_button
-  #   selectedRow <- input$play_button
-  #   print(paste("selectedRow:", selectedRow))
-  #   download.file(selectedRow, destfile = dest_path, mode = "wb")
-  #   
-  #   audio_src <- "temp_sound.wav"
-  #   
-  #   # Return an audio player element
-  #   tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA)
-  # 
-  # })
-  
-  # show_spectrogram <- eventReactive(input$spectrogram_button, {
-  #   dest_path <- file.path(tempdir(), "temp_sound_spec.wav")
-  #   
-  #   # Delete previous file if it exists
-  #   if (file.exists(dest_path)) file.remove(dest_path)
-  #   
-  #   # Take the value of input$select_button and download file
-  #   selectedRow <- input$spectrogram_button
-  #   download.file(selectedRow, destfile = dest_path, mode = "wb")
-  #   
-  #   # Read wav file
-  #   temp_wav <- tuneR::readWave(dest_path)
-  # 
-  #   # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
-  #   v <- ggspectro(temp_wav, ovlp=50)
-  #   v + geom_tile(aes(fill = amplitude))
-  # 
-  # })
   
   # Show the name of the employee that has been clicked on
   output$audio_player <- renderUI({
