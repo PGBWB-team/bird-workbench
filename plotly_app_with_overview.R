@@ -10,6 +10,9 @@ library(DT)
 library(bslib)
 library(tuneR)
 library(seewave)
+library(av)
+library(viridisLite)
+library(later)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -29,6 +32,7 @@ ui <- navbarPage(
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
+           uiOutput("species_title_overview"),
            fluidRow(
              lapply(1:6, function(i){
                column(width = 6,
@@ -56,6 +60,16 @@ ui <- navbarPage(
                  min = 0, 
                  max = 1, 
                  value = c(0.7, 1)
+               ),
+               
+               sliderInput(
+                 inputId = "recording_length",
+                 label = "Recording Length (seconds)",
+                 min = 3,
+                 max = 30,
+                 value = 10,
+                 step = 1,
+                 round = TRUE
                )
              ),
              
@@ -382,6 +396,11 @@ server <- function(input, output, session) {
   ##################################################
   ## Application Build: Species-Specific Overview ##
   ##################################################
+  output$species_title_overview <- renderUI({
+    name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
+    print(h3(name_title))
+  })
+  
   # List of locations
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
   
@@ -406,7 +425,7 @@ server <- function(input, output, session) {
             Date = as.Date(Date),
             Year = year(Date),
             Month = month(Date),
-            Week = epiweek(Date),
+            Week = get_week_from_date(Date),
             Month.Year = paste(Month, Year, sep = ","), 
             Month.Year.Loc = paste(Month, Year, Location, sep = ","),
             Week.Year = paste(Week, Year, sep = ","),
@@ -459,6 +478,26 @@ server <- function(input, output, session) {
     paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
   }
   
+  get_week_from_date <- function(date) {
+    # Extract year from the given date
+    year <- as.integer(format(as.Date(date), "%Y"))
+    
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
+    
+    # Calculate the difference in days between the given date and the first Sunday
+    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
+    
+    # Determine week number
+    week_number <- (days_since_first_sunday %/% 7) +1
+    
+    return(week_number)
+    
+  }
+  
   # Function to fetch files for each species with error handling
   fetch_files <- function(folder) {
     url <- paste0(base_url, folder)
@@ -483,9 +522,7 @@ server <- function(input, output, session) {
   
   output$species_title <- renderUI({
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
-    # name_title <- unique(species_data$Common.Name)
     print(h3(name_title))
-    # print(h3(species_click()))
   })
   
   for (i in seq_along(location_list)) {
@@ -505,7 +542,7 @@ server <- function(input, output, session) {
             Date = as.Date(Date),
             Year = year(Date),
             Month = month(Date),
-            Week = epiweek(Date),
+            Week = get_week_from_date(Date),
             Month.Year = paste(Month, Year, sep = ","), 
             Month.Year.Loc = paste(Month, Year, Location, sep = ","),
             Week.Year = paste(Week, Year, sep = ","),
@@ -524,15 +561,27 @@ server <- function(input, output, session) {
                                 as.numeric(Confidence) >= min_conf &
                                   as.numeric(Confidence) <= max_conf)
         
+        count_data_week <- complete_data %>%
+          group_by(Week.Year.Loc) %>%
+          summarise(Count = n(), .groups = 'drop')
+        
+        count_data_month <- complete_data %>%
+          group_by(Month.Year.Loc) %>%
+          summarise(Count = n(), .groups = 'drop')
+        
+        complete_data_week <- left_join(complete_data, count_data_week, by = "Week.Year.Loc")
+        
+        complete_data_month <- left_join(complete_data, count_data_month, by = "Month.Year.Loc")
+        
         if (input$time_interval == "weekly") {
           # Create the plot
-          p <- ggplot(complete_data, aes(x = Week,
+          p <- ggplot(complete_data_week, aes(x = Week,
                                          key = Week.Year.Loc,
                                          text = paste(
                                            "Week:", Week,
                                            "<br>Date Range:", get_week_date_range(Year, Week),
-                                           "<br>Count:", nrow(Week.Year.Loc)
-                                         ))) +
+                                           "<br>Count:", Count)
+                                         )) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
             scale_x_continuous(breaks = 1:52, limits = c(1, 52)) +
             labs(title = loc, x = "Week", y = "Frequency") +
@@ -542,12 +591,12 @@ server <- function(input, output, session) {
         
         if (input$time_interval == "monthly") {
           # Create the plot
-          p <- ggplot(complete_data, aes(x = Month,
+          p <- ggplot(complete_data_month, aes(x = Month,
                                          key = Month.Year.Loc,
                                          text = paste(
                                            "Month:", Month,
                                            "<br>Date Range:",
-                                           "<br>Count:", nrow(Month.Year.Loc)
+                                           "<br>Count:", Count
                                          ))) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
             scale_x_continuous(breaks = 1:12, limits = c(1, 12)) +
@@ -586,22 +635,21 @@ server <- function(input, output, session) {
     all_files <- fetch_files(species_folders)
     selected_data <- event_data("plotly_selected")
     
-    find_audio <- function(row, species_files, folder_url) {
-      # Create the regex pattern for the current row
-      pattern <- paste0(
-        "^", as.character(round(as.numeric(row[["Confidence"]]), digits=3)), "_[0-9]+_", gsub(".wav", "", basename(row[["Begin.Path"]])),
-        "_", row[["Begin.Time..s."]], "s_", row[["End.Time..s."]], "s.wav", "$"
-      )
+    find_audio_file <- function(row) {
       
-      # Find matching file
-      match <- species_files[str_detect(species_files, pattern)]
-      if (length(match) == 1) {
-        return(paste0(
-          URLencode(folder_url), row[["Species.Code"]],"/", match)
-        )
-      } else {
+      file_name <- basename(row[["Begin.Path"]])
+      start_time <- as.numeric(row[["Begin.Time..s."]])
+      
+      # TEMPORARY LOCAL DIRECTORY FOR TESTING
+      file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
+      
+      audio_loc <- file.path(file_loc, file_name)
+      
+      if (!file.exists(audio_loc)) {
         return(NULL)
       }
+      
+      return(paste0(file_name, "***", start_time))
     }
     
     # filter data based on the selected bin center
@@ -619,7 +667,7 @@ server <- function(input, output, session) {
           Date = as.Date(Date),
           Year = year(Date),
           Month = month(Date),
-          Week = epiweek(Date),
+          Week = get_week_from_date(Date),
           Month.Year = paste(Month, Year, sep = ","), 
           Month.Year.Loc = paste(Month, Year, Location, sep = ","),
           Week.Year = paste(Week, Year, sep = ","),
@@ -638,13 +686,13 @@ server <- function(input, output, session) {
         if (input$time_interval == "weekly") {
           out_df <- subset(complete_data, (Week.Year.Loc %in% selected_data$key & 
                                              as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code"))
+                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date"))
         }
         
         if (input$time_interval == "monthly") {
           out_df <- subset(complete_data, (Month.Year.Loc %in% selected_data$key & 
                                              as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code"))
+                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date"))
         }
         
         # Add action buttons for opening the website
@@ -658,7 +706,9 @@ server <- function(input, output, session) {
             ),
             
             Sound.Button = list({
-              audio_id <- find_audio(.data, all_files, base_url)
+              # audio_id <- find_audio(.data, all_files, base_url)
+              audio_id <- find_audio_file(.data)
+
               if (!is.null(audio_id)) {
                 shinyInput(
                   FUN = actionButton,
@@ -673,7 +723,9 @@ server <- function(input, output, session) {
             }),
             
             Spectrogram.Button = list({
-              audio_id <- find_audio(.data, all_files, base_url)
+              # audio_id <- find_audio(.data, all_files, base_url)
+              audio_id <- find_audio_file(.data) 
+              
               if (!is.null(audio_id)) {
                 shinyInput(
                   FUN = actionButton,
@@ -686,9 +738,10 @@ server <- function(input, output, session) {
                 "No Audio File"
               }
             })
+            
           ) %>%
           select("Sound.Button", "Spectrogram.Button", "Website", "Confidence", 
-                 "Begin.Time..s.", "End.Time..s.", "Week", 
+                 "Begin.Time..s.", "End.Time..s.", "Date", "Week", 
                  "Location", "Begin.Path", "Species.Code") %>%
           ungroup()
         
@@ -699,45 +752,81 @@ server <- function(input, output, session) {
     })
   })
   
+  
   play_recording <- eventReactive(input$play_button, {
-    # define the temporary directory and download the data
+    # TEMPORARY LOCAL DIRECTORY FOR TESTING
+    file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
+    
+    # Grab value from slider for length of recording to extract
+    recording_secs <- input$recording_length
+    
+    # Define the temporary directory and stream the data
     if (!dir.exists("www")) {
       dir.create("www")
     }
     
-    dest_path <- file.path("www", "temp_sound.wav")
+    # audio_src <- "temp_sound.wav"
+    # dest_path <- file.path("www", audio_src)
     
     # Delete previous file if it exists
-    if (file.exists(dest_path)) file.remove(dest_path)
+    # if (file.exists(dest_path)) file.remove(dest_path)
     
-    # take the value of input$select_button
+    # Take the value of input$select_button
     selectedRow <- input$play_button
-    download.file(selectedRow, destfile = dest_path, mode = "wb")
+    audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
-    audio_src <- "temp_sound.wav"
+    audio_src <- paste0(strsplit(audio_file, ".wav"), "_", begin_time, "s.wav")
+    dest_path <- file.path("www", audio_src)
     
-    # Return an audio player element
+    later::later(function() {
+      if (file.exists(dest_path)) file.remove(dest_path)
+    }, delay = 10)
+    
+    audio_loc <- file.path(file_loc, audio_file)
+    output_wav <- av_audio_convert(audio = audio_loc, 
+                                   output = dest_path,
+                                   start_time = begin_time,
+                                   total_time = as.numeric(recording_secs))
+    
     tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA)
-
   })
   
   show_spectrogram <- eventReactive(input$spectrogram_button, {
-    dest_path <- file.path(tempdir(), "temp_sound_spec.wav")
+    # TEMPORARY LOCAL DIRECTORY FOR TESTING
+    file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
+    
+    # Grab value from slider for length of recording to extract
+    recording_secs <- input$recording_length
+    
+    # Define the temporary directory and stream the data
+    if (!dir.exists("www")) {
+      dir.create("www")
+    }
+    
+    audio_src <- "temp_sound.wav"
+    dest_path <- file.path("www", audio_src)
     
     # Delete previous file if it exists
     if (file.exists(dest_path)) file.remove(dest_path)
     
-    # Take the value of input$select_button and download file
-    selectedRow <- input$spectrogram_button
-    download.file(selectedRow, destfile = dest_path, mode = "wb")
+    # Take the value of input$select_button
+    selectedRow <- input$play_button
+    audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
-    # Read wav file
-    temp_wav <- tuneR::readWave(dest_path)
-
+    audio_loc <- file.path(file_loc, audio_file)
+    output_wav <- av_audio_convert(audio = audio_loc, 
+                                   output = dest_path,
+                                   start_time = begin_time,
+                                   total_time = as.numeric(recording_secs))
+    audio_wav <- tuneR::readWave(output_wav)
+    
     # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
-    v <- ggspectro(temp_wav, ovlp=50)
-    v + geom_tile(aes(fill = amplitude))
-
+    v <- ggspectro(audio_wav, ovlp=50)
+    v + geom_tile(aes(fill = amplitude)) +
+      scale_fill_gradientn(colours = viridis(256, option = "B"))
+    
   })
   
   # Show the name of the employee that has been clicked on
