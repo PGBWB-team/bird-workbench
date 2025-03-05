@@ -106,19 +106,10 @@ server <- function(input, output, session) {
   species_click <- reactiveVal("acafly") # Default species code
   
   # New df of total count by species:
-  count_by_species <- all_data %>% count(Common.Name, Species.Code)
+  count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
   
   # Create display column that contains count and species name
-  count_by_species$Display <- paste(count_by_species$Common.Name, "<br>", count_by_species$n, sep = "")
-  
-  # Calculate number of rows that will be in each column
-  rows_per_column <- ceiling(nrow(count_by_species) / 4)
-  
-  # Split the data into four parts
-  col1 <- count_by_species %>% slice(1:rows_per_column)
-  col2 <- count_by_species %>% slice((rows_per_column + 1):(2 * rows_per_column))
-  col3 <- count_by_species %>% slice((2 * rows_per_column + 1):(3 * rows_per_column))
-  col4 <- count_by_species %>% slice((3 * rows_per_column + 1):n())
+  # count_by_species$Display <- paste(count_by_species$Common.Name, "<br>", count_by_species$n, sep = "")
   
   # Function to create table:
   create_table <- function(data) {
@@ -264,23 +255,16 @@ server <- function(input, output, session) {
   observe({
     output$species_by_year_pivot <- renderDataTable({ create_table_pivot(species_by_year())})
   })
+  
   observe({
-    output$species_counts_t1 <- renderDataTable({ create_table(col1) })
-    output$species_counts_t2 <- renderDataTable({ create_table(col2) })
-    output$species_counts_t3 <- renderDataTable({ create_table(col3) })
-    output$species_counts_t4 <- renderDataTable({ create_table(col4) })
+    output$species_counts_t1 <- renderDataTable({ create_table_pivot(count_by_species) })
   })
   
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
     if (input$sel_view == "totals") {
       
-      fluidRow(
-        column(3, DT::dataTableOutput("species_counts_t1")),
-        column(3, DT::dataTableOutput("species_counts_t2")),
-        column(3, DT::dataTableOutput("species_counts_t3")),
-        column(3, DT::dataTableOutput("species_counts_t4"))
-      )
+      DT::dataTableOutput("species_counts_t1")
     
     } else if (input$sel_view == "by_month") {
       
@@ -362,34 +346,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
     if (nrow(selected_row) > 0) {
-      new_species <- col1$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
-    }
-  })
-  
-  observeEvent(input$species_counts_t2_cells_selected, {
-    selected_row <- input$species_counts_t2_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- col2$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
-    }
-  })
-  
-  observeEvent(input$species_counts_t3_cells_selected, {
-    selected_row <- input$species_counts_t3_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- col3$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
-    }
-  })
-  
-  observeEvent(input$species_counts_t4_cells_selected, {
-    selected_row <- input$species_counts_t4_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- col4$Species.Code[selected_row]
+      new_species <- count_by_species$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_overview")
     }
