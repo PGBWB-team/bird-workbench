@@ -24,6 +24,15 @@ ui <- navbarPage(
   selected = "ph_overview",
   tabPanel(title = "Prairie Haven Overview",
            value = "ph_overview",
+           
+           sliderInput(
+             inputId = "confidence_selection_overview", 
+             label = "Confidence Level", 
+             min = 0, 
+             max = 1, 
+             value = c(0.7, 1)
+           ),
+           
            selectInput(inputId = "sel_view", 
                        label = h3("View Selection"),
                        choices = list("Species Totals" = "totals", "Species by Month" = "by_month",
@@ -104,6 +113,14 @@ server <- function(input, output, session) {
   ###############################################
   # Reactive value to store the selected species code
   species_click <- reactiveVal("acafly") # Default species code
+  
+  # Save confidence range
+  # min_conf_ov <- input$confidence_selection_overview[1]
+  # max_conf_ov <- input$confidence_selection_overview[2]
+  # 
+  # all_data <- subset(all_data,
+  #                    as.numeric(Confidence) >= min_conf_ov &
+  #                      as.numeric(Confidence) <= max_conf_ov)
   
   # New df of total count by species:
   count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
