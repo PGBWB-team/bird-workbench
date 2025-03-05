@@ -113,10 +113,12 @@ server <- function(input, output, session) {
     datatable(
       data.frame(Display = data$Display),
       escape = FALSE,
+      extensions = "Buttons",
       options = list(
-        dom = "t", 
+        dom = 'Bfrtip',
         ordering = FALSE, 
         page_length = nrow(data),
+        buttons = c('csv', 'copy'),
         lengthMenu = list(c(nrow(data)), c("All")) # Allow selecting "All"
       ),
       rownames = FALSE,
@@ -130,9 +132,11 @@ server <- function(input, output, session) {
     datatable(
       data,
       escape = FALSE,
+      extensions = "Buttons",
       options = list(
-        dom = "t",
+        dom = 'Bfrtip',
         ordering = TRUE,
+        buttons = c('csv', 'copy'),
         page_length = nrow(data), 
         lengthMenu = list(c(nrow(data)), c("All")),
         columnDefs = list(list(visible=FALSE, targets="Species.Code"))
