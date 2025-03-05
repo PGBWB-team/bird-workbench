@@ -31,17 +31,6 @@ ui <- navbarPage(
                        selected = "totals"),
           uiOutput("overview_view")),
   
-  tabPanel(title = "Species-Specific Overview",
-           value = "species_overview",
-           uiOutput("species_title_overview"),
-           fluidRow(
-             lapply(1:6, function(i){
-               column(width = 6,
-                      plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px"))
-             })
-             )
-  ), 
-  
   tabPanel(title = "Species-Specific Location Drilldown", 
            value = "species_loc_drilldown",
            
@@ -93,6 +82,17 @@ ui <- navbarPage(
              )
            )
      
+  ),
+  
+  tabPanel(title = "Species-Specific Overview",
+           value = "species_overview",
+           uiOutput("species_title_overview"),
+           fluidRow(
+             lapply(1:6, function(i){
+               column(width = 6,
+                      plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px"))
+             })
+           )
   )
 )
 
@@ -107,9 +107,6 @@ server <- function(input, output, session) {
   
   # New df of total count by species:
   count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
-  
-  # Create display column that contains count and species name
-  # count_by_species$Display <- paste(count_by_species$Common.Name, "<br>", count_by_species$n, sep = "")
   
   # Function to create table:
   create_table <- function(data) {
@@ -321,7 +318,7 @@ server <- function(input, output, session) {
     if (nrow(selected_row) > 0) {
       new_species <- species_by_month()$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
+      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
   
@@ -330,7 +327,7 @@ server <- function(input, output, session) {
     if (nrow(selected_row) > 0) {
       new_species <- species_by_location()$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
+      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
   
@@ -339,7 +336,7 @@ server <- function(input, output, session) {
     if (nrow(selected_row) > 0) {
       new_species <- species_by_year()$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
+      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
   
@@ -348,7 +345,7 @@ server <- function(input, output, session) {
     if (nrow(selected_row) > 0) {
       new_species <- count_by_species$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_overview")
+      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
   
@@ -456,29 +453,7 @@ server <- function(input, output, session) {
     return(week_number)
     
   }
-  
-  # Function to fetch files for each species with error handling
-  fetch_files <- function(folder) {
-    url <- paste0(base_url, folder)
-    
-    # Attempt to fetch the HTML content
-    tryCatch({
-      page <- rvest::read_html(url)
-      files <- page %>% html_nodes("a") %>% html_attr("href")
-      
-      # Check if files are empty
-      if (length(files) == 0) {
-        warning(paste("No files found in folder:", folder))
-        return(character(0))  # Return an empty character vector
-      }
-      
-      return(files)
-    }, error = function(e) {
-      warning(paste("Error fetching files for folder:", folder, "-", e$message))
-      return(character(0))  # Return an empty character vector in case of error
-    })
-  }
-  
+
   output$species_title <- renderUI({
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
     print(h3(name_title))
@@ -586,9 +561,7 @@ server <- function(input, output, session) {
     audio_player(NULL)
     spectrogram(NULL)
   })
-  
-  # Pre-fetch the file list from the server during app initialization
-  base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder_v2/"
+
   
   # Function to create sound button
   shinyInput <- function(FUN, id, ...) {
@@ -602,7 +575,6 @@ server <- function(input, output, session) {
     species_folders <- paste0(species_click(), "/")
     
     # Combine file listings for all species
-    all_files <- fetch_files(species_folders)
     selected_data(event_data("plotly_selected"))
     
     find_audio_file <- function(row) {
@@ -676,7 +648,6 @@ server <- function(input, output, session) {
             ),
             
             Sound.Button = list({
-              # audio_id <- find_audio(.data, all_files, base_url)
               audio_id <- find_audio_file(.data)
 
               if (!is.null(audio_id)) {
@@ -693,7 +664,6 @@ server <- function(input, output, session) {
             }),
             
             Spectrogram.Button = list({
-              # audio_id <- find_audio(.data, all_files, base_url)
               audio_id <- find_audio_file(.data) 
               
               if (!is.null(audio_id)) {
