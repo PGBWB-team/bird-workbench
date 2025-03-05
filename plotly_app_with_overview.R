@@ -77,6 +77,7 @@ ui <- navbarPage(
              mainPanel(
                uiOutput("species_title"),
                tabsetPanel(
+                 id = "tab_selection",
                  !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
                    tabPanel(
                      title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
@@ -617,6 +618,17 @@ server <- function(input, output, session) {
   
   # Placeholder for filtered data reactive value
   filtered_data <- reactiveVal(NULL)
+  selected_data <- reactiveVal(NULL)
+  
+  # Create reactive values to store audio and spectrogram
+  audio_player <- reactiveVal(NULL)
+  spectrogram <- reactiveVal(NULL)
+
+  observeEvent(input$tab_selection, {
+    selected_data(NULL)
+    audio_player(NULL)
+    spectrogram(NULL)
+  })
   
   # Pre-fetch the file list from the server during app initialization
   base_url <- "https://earsinthedriftless.com/BirdNET_Segments_test/Test_output_folder_v2/"
@@ -634,7 +646,7 @@ server <- function(input, output, session) {
     
     # Combine file listings for all species
     all_files <- fetch_files(species_folders)
-    selected_data <- event_data("plotly_selected")
+    selected_data(event_data("plotly_selected"))
     
     find_audio_file <- function(row) {
       
@@ -683,15 +695,15 @@ server <- function(input, output, session) {
         mutate(YearlyCount = n()) %>%
         ungroup()
       
-      if (!is.null(selected_data)) {
+      if (!is.null(selected_data())) {
         if (input$time_interval == "weekly") {
-          out_df <- subset(complete_data, (Week.Year.Loc %in% selected_data$key & 
+          out_df <- subset(complete_data, (Week.Year.Loc %in% selected_data()$key & 
                                              as.numeric(Confidence)>=min_conf & 
                                              as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date"))
         }
         
         if (input$time_interval == "monthly") {
-          out_df <- subset(complete_data, (Month.Year.Loc %in% selected_data$key & 
+          out_df <- subset(complete_data, (Month.Year.Loc %in% selected_data()$key & 
                                              as.numeric(Confidence)>=min_conf & 
                                              as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date"))
         }
@@ -754,7 +766,7 @@ server <- function(input, output, session) {
   })
   
   
-  play_recording <- eventReactive(input$play_button, {
+  observeEvent(input$play_button, {
     # TEMPORARY LOCAL DIRECTORY FOR TESTING
     file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
     
@@ -765,12 +777,6 @@ server <- function(input, output, session) {
     if (!dir.exists("www")) {
       dir.create("www")
     }
-    
-    # audio_src <- "temp_sound.wav"
-    # dest_path <- file.path("www", audio_src)
-    
-    # Delete previous file if it exists
-    # if (file.exists(dest_path)) file.remove(dest_path)
     
     # Take the value of input$select_button
     selectedRow <- input$play_button
@@ -790,10 +796,9 @@ server <- function(input, output, session) {
                                    start_time = begin_time,
                                    total_time = as.numeric(recording_secs))
     
-    tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA)
+    audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
   })
-  
-  show_spectrogram <- eventReactive(input$spectrogram_button, {
+  observeEvent(input$spectrogram_button, {
     # TEMPORARY LOCAL DIRECTORY FOR TESTING
     file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
     
@@ -824,20 +829,23 @@ server <- function(input, output, session) {
     audio_wav <- tuneR::readWave(output_wav)
     
     # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
-    v <- ggspectro(audio_wav, ovlp=50)
-    v + geom_tile(aes(fill = amplitude)) +
+    v <- ggspectro(audio_wav, ovlp = 50) +
+      geom_tile(aes(fill = amplitude)) +
       ylim(0, 12) +
       scale_fill_gradientn(colours = viridis(256, option = "B")) 
     
+    spectrogram(v)
   })
   
   # Show the name of the employee that has been clicked on
   output$audio_player <- renderUI({
-    play_recording()
+    req(audio_player())
+    audio_player()
   })
   
   output$spectrogram <- renderPlot({
-    show_spectrogram()
+    req(spectrogram())
+    spectrogram()
   })
   
   
