@@ -14,6 +14,7 @@ library(seewave)
 library(av)
 library(viridisLite)
 library(later)
+library(RColorBrewer)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -396,11 +397,16 @@ server <- function(input, output, session) {
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
   
   # Set colors based on year. You'll want to add more colors with each new year. 
-  cols <- c("2020" = "#F8766D",
-            "2021" = "#7CAE00",
-            "2022" = "#00BFC4",
-            "2023" = "#C77CFF",
-            "2024" = "#E68613")
+  # cols <- c("2020" = "#F8766D",
+  #           "2021" = "#7CAE00",
+  #           "2022" = "#00BFC4",
+  #           "2023" = "#C77CFF",
+  #           "2024" = "#E68613")
+  # cols <- brewer.pal(5, "Greens")
+  cols <- brewer.pal(5, "YlGn")
+  # cols <- brewer.pal(5, "YlGnBu")
+  # cols <- brewer.pal(5, "YlOrBr")
+  names(cols) <- c("2020", "2021", "2022", "2023", "2024")
   
   for (i in seq_along(location_list)) {
     local({
@@ -552,13 +558,14 @@ server <- function(input, output, session) {
                                            "<br>Count:", Count)
                                          )) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
-            scale_x_continuous(breaks = seq(1, 52, by = 4), limits = c(1, 52)) +
-            labs(title = loc, x = "Week", y = "Frequency") +
+            scale_x_continuous(breaks = c(1, 5, 9, 13, 17, 21, 26, 30, 35, 39, 44, 48), 
+                               limits = c(1, 52),
+                               labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
+            labs(title = loc, x = "Month (Approximate)", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
             theme_minimal() +
             theme(
-              axis.text.x = element_text(angle = 45, hjust = 1),
-              axis.text.x.top = element_text(angle = 0)
+              axis.text.x = element_text(angle = 0, hjust = 1)
             )
           
         }
@@ -569,7 +576,6 @@ server <- function(input, output, session) {
                                          key = Month.Year.Loc,
                                          text = paste(
                                            "Month:", Month,
-                                           "<br>Date Range:",
                                            "<br>Count:", Count
                                          ))) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
@@ -585,6 +591,7 @@ server <- function(input, output, session) {
         event_register(plotly_object, "plotly_click")
         plotly_object %>%
           layout(clickmode = "event+select")  
+        
       })
     })
   }
@@ -612,8 +619,7 @@ server <- function(input, output, session) {
 
   # Observe the selected data and filter the original dataframe
   observe({
-    
-    species_folders <- paste0(species_click(), "/")
+    req(event_data("plotly_selected"))
     
     # Combine file listings for all species
     selected_data(event_data("plotly_selected"))
@@ -726,13 +732,15 @@ server <- function(input, output, session) {
                  "Location", "Begin.Path", "Species.Code") %>%
           ungroup()
         
-        datatable(out_df, escape = FALSE)
+        datatable(out_df, 
+                  escape = FALSE,
+                  selection = "none")
       } else {
         data.frame()
       }
     })
   })
-  
+
   
   observeEvent(input$play_button, {
     # TEMPORARY LOCAL DIRECTORY FOR TESTING
@@ -766,6 +774,7 @@ server <- function(input, output, session) {
     
     audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
   })
+  
   observeEvent(input$spectrogram_button, {
     # TEMPORARY LOCAL DIRECTORY FOR TESTING
     file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
