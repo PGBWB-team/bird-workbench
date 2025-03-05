@@ -151,8 +151,7 @@ server <- function(input, output, session) {
       selection = list(mode = "single", target = "cell")
     )
   }
-
-
+  
   create_pivot_month <- function(df, yr_input="All") {
     if (yr_input == "All") {
       out_df <- df %>%
@@ -379,7 +378,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
     if (nrow(selected_row) > 0) {
-      new_species <- count_by_species$Species.Code[selected_row]
+      new_species <- total_species()$Species.Code[selected_row]
       species_click(new_species) # Update the reactive value
       updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
@@ -553,10 +552,15 @@ server <- function(input, output, session) {
                                            "<br>Count:", Count)
                                          )) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
-            scale_x_continuous(breaks = 1:52, limits = c(1, 52)) +
+            scale_x_continuous(breaks = seq(1, 52, by = 4), limits = c(1, 52)) +
             labs(title = loc, x = "Week", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
-            theme_minimal()
+            theme_minimal() +
+            theme(
+              axis.text.x = element_text(angle = 45, hjust = 1),
+              axis.text.x.top = element_text(angle = 0)
+            )
+          
         }
         
         if (input$time_interval == "monthly") {
@@ -573,6 +577,7 @@ server <- function(input, output, session) {
             labs(title = loc, x = "Month", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
             theme_minimal()
+          
         }
         
         # Convert to an interactive plotly object and register the click event
