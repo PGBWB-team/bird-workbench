@@ -114,17 +114,6 @@ server <- function(input, output, session) {
   # Reactive value to store the selected species code
   species_click <- reactiveVal("acafly") # Default species code
   
-  # Save confidence range
-  # min_conf_ov <- input$confidence_selection_overview[1]
-  # max_conf_ov <- input$confidence_selection_overview[2]
-  # 
-  # all_data <- subset(all_data,
-  #                    as.numeric(Confidence) >= min_conf_ov &
-  #                      as.numeric(Confidence) <= max_conf_ov)
-  
-  # New df of total count by species:
-  count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
-  
   # Function to create table:
   create_table <- function(data) {
     datatable(
@@ -133,7 +122,7 @@ server <- function(input, output, session) {
       extensions = "Buttons",
       options = list(
         dom = 'Bfrtip',
-        ordering = FALSE, 
+        ordering = FALSE,
         page_length = nrow(data),
         buttons = c('csv', 'copy'),
         lengthMenu = list(c(nrow(data)), c("All")) # Allow selecting "All"
@@ -144,7 +133,7 @@ server <- function(input, output, session) {
       selection = list(mode = "single", target = "cell")
     )
   }
-  
+
   create_table_pivot <- function(data) {
     datatable(
       data,
@@ -154,7 +143,7 @@ server <- function(input, output, session) {
         dom = 'Bfrtip',
         ordering = TRUE,
         buttons = c('csv', 'copy'),
-        page_length = nrow(data), 
+        page_length = nrow(data),
         lengthMenu = list(c(nrow(data)), c("All")),
         columnDefs = list(list(visible=FALSE, targets="Species.Code"))
       ),
@@ -162,7 +151,8 @@ server <- function(input, output, session) {
       selection = list(mode = "single", target = "cell")
     )
   }
-  
+
+
   create_pivot_month <- function(df, yr_input="All") {
     if (yr_input == "All") {
       out_df <- df %>%
@@ -185,79 +175,104 @@ server <- function(input, output, session) {
       return(out_df)
     }
   }
-  
+
   create_pivot_year <- function(df, loc_input = "All") {
     if (loc_input == "All") {
       out_df <- df %>%
         mutate(Date = as.Date(Date), Year = year(Date))
-     
+
        yrs <- unique(out_df$Year)
-       
+
        out_df <- out_df %>%
         group_by(Common.Name, Species.Code, Year) %>%
         summarize(Count_by_Species = n()) %>%
         pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
         select(Common.Name, Species.Code, as.character(yrs))
-       
+
        return(out_df)
     } else {
       out_df <- df %>%
         filter(Location == loc_input) %>%
-        mutate(Date = as.Date(Date), Year = year(Date)) 
-      
+        mutate(Date = as.Date(Date), Year = year(Date))
+
       yrs <- unique(out_df$Year)
-      
+
       out_df <- out_df %>%
         group_by(Common.Name, Species.Code, Year) %>%
         summarize(Count_by_Species = n()) %>%
         pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
         select(Common.Name, Species.Code, as.character(yrs))
-      
+
       return(out_df)
     }
   }
-  
+
   create_pivot_location <- function(df, yr_input = "All") {
-    
+
     if (yr_input == "All") {
       locs <- unique(df$Location)
-      
-      out_df <- df %>%
-        group_by(Common.Name, Species.Code, Location) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, locs) 
-      
-      return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(lubridate::year(as.Date(Date)) == yr_input)
-      
-      locs <- unique(out_df$Location)
-      
+
       out_df <- df %>%
         group_by(Common.Name, Species.Code, Location) %>%
         summarize(Count_by_Species = n()) %>%
         pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
         select(Common.Name, Species.Code, locs)
-      
+
+      return(out_df)
+    } else {
+      out_df <- df %>%
+        filter(lubridate::year(as.Date(Date)) == yr_input)
+
+      locs <- unique(out_df$Location)
+
+      out_df <- out_df %>%
+        group_by(Common.Name, Species.Code, Location) %>%
+        summarize(Count_by_Species = n()) %>%
+        pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+        select(Common.Name, Species.Code, locs)
+
       return(out_df)
     }
   }
   
+  confidence_filter <- function(data, conf) {
+    min_conf <- conf[1]
+    max_conf <- conf[2]
+    
+    data <- subset(data,
+                   as.numeric(Confidence) >= min_conf &
+                     as.numeric(Confidence) <= max_conf)
+    
+    return(data)
+  }
+  
   # Reactive expression for species_by_month based on year selection
+  total_species <- reactive({
+    req(input$confidence_selection_overview)
+    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
+    
+    # New df of total count by species:
+    count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
+  })
+  
   species_by_month <- reactive({
     req(input$year_sel)  # Ensure input exists before proceeding
+    req(input$confidence_selection_overview)
+    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
     create_pivot_month(all_data, input$year_sel)
   })
-  
+
   species_by_location <- reactive({
     req(input$year_sel) # Ensure input exists before proceeding
+    req(input$confidence_selection_overview)
+    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
     create_pivot_location(all_data, input$year_sel)
   })
-  
+
   species_by_year <- reactive({
     req(input$loc_sel)
+    req(input$confidence_selection_overview)
+    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
     create_pivot_year(all_data, input$loc_sel)
   })
 
@@ -265,64 +280,64 @@ server <- function(input, output, session) {
   observe({
     output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month()) })
   })
-  
+
   observe({
     output$species_by_location_pivot <- renderDataTable({ create_table_pivot(species_by_location()) })
   })
-  
+
   observe({
     output$species_by_year_pivot <- renderDataTable({ create_table_pivot(species_by_year())})
   })
-  
+
   observe({
-    output$species_counts_t1 <- renderDataTable({ create_table_pivot(count_by_species) })
+    output$species_counts_t1 <- renderDataTable({ create_table_pivot(total_species()) })
   })
-  
+
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
     if (input$sel_view == "totals") {
-      
+
       DT::dataTableOutput("species_counts_t1")
-    
+
     } else if (input$sel_view == "by_month") {
-      
+
       # Creating valid choices for year filtering
       year_vals <- unique(as.character(lubridate::year(all_data$Date)))
       year_vals <- as.list(year_vals[order(year_vals)])
       names(year_vals) <- as.list(year_vals)
       year_vals <- c(year_vals, "All"="All")
-      
+
       tagList(
-        selectInput("year_sel", 
-                    label = "Year Selection", 
+        selectInput("year_sel",
+                    label = "Year Selection",
                     choices = year_vals,
                     selected = "All"),
         DT::dataTableOutput("species_by_month_pivot")
       )
-      
+
     } else if (input$sel_view =="by_location") {
-      
+
       # Creating valid choices for year filtering
       year_vals <- unique(as.character(lubridate::year(all_data$Date)))
       year_vals <- as.list(year_vals[order(year_vals)])
       names(year_vals) <- as.list(year_vals)
       year_vals <- c(year_vals, "All" = "All")
-      
+
       tagList(
         selectInput("year_sel",
-                    label = "Year Selection", 
-                    choices = year_vals, 
+                    label = "Year Selection",
+                    choices = year_vals,
                     selected = "All"),
         DT::dataTableOutput("species_by_location_pivot")
       )
     } else if (input$sel_view == "by_year") {
-      
+
       # Create valid choices for year filtering
       loc_vals <- unique(all_data$Location)
       loc_vals <- as.list(loc_vals[order(loc_vals)])
       names(loc_vals) <- as.list(loc_vals)
       loc_vals <- c(loc_vals, "All" = "All")
-      
+
       tagList(
         selectInput("loc_sel",
                     label = "Location Selection",
@@ -342,7 +357,7 @@ server <- function(input, output, session) {
       updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
-  
+
   observeEvent(input$species_by_location_pivot_cells_selected, {
     selected_row <- input$species_by_location_pivot_cells_selected
     if (nrow(selected_row) > 0) {
@@ -351,7 +366,7 @@ server <- function(input, output, session) {
       updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
-  
+
   observeEvent(input$species_by_year_pivot_cells_selected, {
     selected_row <- input$species_by_year_pivot_cells_selected
     if (nrow(selected_row) > 0) {
@@ -360,7 +375,7 @@ server <- function(input, output, session) {
       updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
     }
   })
-  
+
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
     if (nrow(selected_row) > 0) {
