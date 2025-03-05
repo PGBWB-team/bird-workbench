@@ -701,24 +701,8 @@ server <- function(input, output, session) {
                 shinyInput(
                   FUN = actionButton,
                   id = audio_id,
-                  label = "Play Sound", 
+                  label = "Audio", 
                   onclick = 'Shiny.setInputValue(\"play_button\", this.id, {priority: \"event\"})'
-                )
-              }
-              else {
-                "No Audio File"
-              }
-            }),
-            
-            Spectrogram.Button = list({
-              audio_id <- find_audio_file(.data) 
-              
-              if (!is.null(audio_id)) {
-                shinyInput(
-                  FUN = actionButton,
-                  id = audio_id,
-                  label = "Display Spectrogram", 
-                  onclick = 'Shiny.setInputValue(\"spectrogram_button\", this.id, {priority: \"event\"})'
                 )
               }
               else {
@@ -727,7 +711,7 @@ server <- function(input, output, session) {
             })
             
           ) %>%
-          select("Sound.Button", "Spectrogram.Button", "Website", "Confidence", 
+          select("Sound.Button", "Website", "Confidence", 
                  "Begin.Time..s.", "End.Time..s.", "Date", "Week", 
                  "Location", "Begin.Path", "Species.Code") %>%
           ungroup()
@@ -773,43 +757,13 @@ server <- function(input, output, session) {
                                    total_time = as.numeric(recording_secs))
     
     audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
-  })
-  
-  observeEvent(input$spectrogram_button, {
-    # TEMPORARY LOCAL DIRECTORY FOR TESTING
-    file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
     
-    # Grab value from slider for length of recording to extract
-    recording_secs <- input$recording_length
-    
-    # Define the temporary directory and stream the data
-    if (!dir.exists("www")) {
-      dir.create("www")
-    }
-    
-    audio_src <- "temp_sound.wav"
-    dest_path <- file.path("www", audio_src)
-    
-    # Delete previous file if it exists
-    if (file.exists(dest_path)) file.remove(dest_path)
-    
-    # Take the value of input$select_button
-    selectedRow <- input$spectrogram_button
-    audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
-    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
-    
-    audio_loc <- file.path(file_loc, audio_file)
-    output_wav <- av_audio_convert(audio = audio_loc, 
-                                   output = dest_path,
-                                   start_time = begin_time,
-                                   total_time = as.numeric(recording_secs))
     audio_wav <- tuneR::readWave(output_wav)
     
-    # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
     v <- ggspectro(audio_wav, ovlp = 50) +
       geom_tile(aes(fill = amplitude)) +
       ylim(0, 12) +
-      scale_fill_gradientn(colours = viridis(256, option = "B")) 
+      scale_fill_gradientn(colours = viridis(256, option = "B"))
     
     spectrogram(v)
   })
