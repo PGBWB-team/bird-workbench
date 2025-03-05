@@ -1,3 +1,4 @@
+# Libraries
 library(ggplot2)
 library(lubridate)
 library(dplyr)
@@ -811,7 +812,7 @@ server <- function(input, output, session) {
     if (file.exists(dest_path)) file.remove(dest_path)
     
     # Take the value of input$select_button
-    selectedRow <- input$play_button
+    selectedRow <- input$spectrogram_button
     audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
     begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
@@ -825,7 +826,8 @@ server <- function(input, output, session) {
     # spectro(temp_wav, f= 48000, wl=512, ovlp=75, flim = c(1, 15), palette = reverse.gray.colors.1)
     v <- ggspectro(audio_wav, ovlp=50)
     v + geom_tile(aes(fill = amplitude)) +
-      scale_fill_gradientn(colours = viridis(256, option = "B"))
+      ylim(0, 12) +
+      scale_fill_gradientn(colours = viridis(256, option = "B")) 
     
   })
   
