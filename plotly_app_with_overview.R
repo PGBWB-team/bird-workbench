@@ -153,86 +153,40 @@ server <- function(input, output, session) {
     )
   }
   
-  create_pivot_month <- function(df, yr_input="All") {
-    if (yr_input == "All") {
-      out_df <- df %>%
-        mutate(Date = as.Date(Date), Month = month(Date)) %>%
-        group_by(Common.Name, Species.Code, Month) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(1:12)) %>%
-        rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
-      return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(lubridate::year(as.Date(Date)) == yr_input) %>%
-        mutate(Date = as.Date(Date), Month = month(Date)) %>%
-        group_by(Common.Name, Species.Code, Month) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(1:12)) %>%
-        rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
-      return(out_df)
+  create_pivot_month <- function(df, yr_input = "All") {
+    df <- df %>%
+      mutate(Date = as.Date(Date), Month = month(Date))
+    
+    if (yr_input != "All") {
+      df <- df %>% filter(year(Date) == yr_input)
     }
+    
+    df %>%
+      group_by(Common.Name, Species.Code, Month) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") %>%
+      pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      rename_with(~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
   }
 
   create_pivot_year <- function(df, loc_input = "All") {
-    if (loc_input == "All") {
-      out_df <- df %>%
-        mutate(Date = as.Date(Date), Year = year(Date))
-
-       yrs <- unique(out_df$Year)
-
-       out_df <- out_df %>%
-        group_by(Common.Name, Species.Code, Year) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(yrs))
-
-       return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(Location == loc_input) %>%
-        mutate(Date = as.Date(Date), Year = year(Date))
-
-      yrs <- unique(out_df$Year)
-
-      out_df <- out_df %>%
-        group_by(Common.Name, Species.Code, Year) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(yrs))
-
-      return(out_df)
-    }
+    df <- df %>%
+      filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
+      mutate(Date = as.Date(Date), Year = year(Date)) %>%
+      group_by(Common.Name, Species.Code, Year) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") %>%
+      pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0))
+    
+    return(df)
   }
 
   create_pivot_location <- function(df, yr_input = "All") {
-
-    if (yr_input == "All") {
-      locs <- unique(df$Location)
-
-      out_df <- df %>%
-        group_by(Common.Name, Species.Code, Location) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, locs)
-
-      return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(lubridate::year(as.Date(Date)) == yr_input)
-
-      locs <- unique(out_df$Location)
-
-      out_df <- out_df %>%
-        group_by(Common.Name, Species.Code, Location) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, locs)
-
-      return(out_df)
-    }
+    df <- df %>%
+      filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
+      group_by(Common.Name, Species.Code, Location) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") %>%
+      pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0))
+    
+    return(df)
   }
   
   confidence_filter <- function(data, conf) {
