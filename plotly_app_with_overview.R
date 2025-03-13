@@ -231,21 +231,14 @@ server <- function(input, output, session) {
   })
 
   # Observe Data Tables
-  observe({
-    output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month()) })
-  })
 
-  observe({
-    output$species_by_location_pivot <- renderDataTable({ create_table_pivot(species_by_location()) })
-  })
+  output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month()) })
 
-  observe({
-    output$species_by_year_pivot <- renderDataTable({ create_table_pivot(species_by_year())})
-  })
+  output$species_by_location_pivot <- renderDataTable({ create_table_pivot(species_by_location()) })
 
-  observe({
-    output$species_counts_t1 <- renderDataTable({ create_table_pivot(total_species()) })
-  })
+  output$species_by_year_pivot <- renderDataTable({ create_table_pivot(species_by_year())})
+
+  output$species_counts_t1 <- renderDataTable({ create_table_pivot(total_species()) })
 
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
