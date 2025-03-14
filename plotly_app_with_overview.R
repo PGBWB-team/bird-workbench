@@ -199,7 +199,7 @@ server <- function(input, output, session) {
     all_data <- confidence_filter(all_data, input$confidence_selection_overview)
     # New df of total count by species:
     count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
-  })
+  }) 
   
   species_by_month <- reactive({
     req(input$year_sel)  # Ensure input exists before proceeding
@@ -221,13 +221,34 @@ server <- function(input, output, session) {
     all_data <- confidence_filter(all_data, input$confidence_selection_overview)
     create_pivot_year(all_data, input$loc_sel)
   })
+  
+  # Ensure year_sel exists before caching
+  cached_species_by_month <- reactive({
+    req(input$year_sel)  # Ensures year_sel exists before proceeding
+    species_by_month()
+  }) %>% bindCache(input$confidence_selection_overview, input$year_sel)
+  
+  cached_species_by_location <- reactive({
+    req(input$year_sel)
+    species_by_location()
+  }) %>% bindCache(input$confidence_selection_overview, input$year_sel)
+  
+  cached_species_by_year <- reactive({
+    req(input$loc_sel)
+    species_by_year()
+  }) %>% bindCache(input$confidence_selection_overview, input$loc_sel)
+  
+  cached_species_counts <- reactive({
+    total_species()
+  }) %>% bindCache(input$confidence_selection_overview)
+  
 
   # Observe Data Tables
-  output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month()) })
-  output$species_by_location_pivot <- renderDataTable({ create_table_pivot(species_by_location()) })
-  output$species_by_year_pivot <- renderDataTable({ create_table_pivot(species_by_year())})
-  output$species_counts_t1 <- renderDataTable({ create_table_pivot(total_species()) })
-
+  output$species_by_month_pivot <- renderDataTable({ create_table_pivot(cached_species_by_month()) })
+  output$species_by_location_pivot <- renderDataTable({ create_table_pivot(cached_species_by_location()) })
+  output$species_by_year_pivot <- renderDataTable({ create_table_pivot(cached_species_by_year()) })
+  output$species_counts_t1 <- renderDataTable({ create_table_pivot(cached_species_counts()) })
+  
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
     # Creating valid choices for year filtering
@@ -263,8 +284,8 @@ server <- function(input, output, session) {
         DT::dataTableOutput("species_by_year_pivot")
       )
     }
-  })
-
+  }) 
+  
   # Observe clicks on the tables
   observeEvent(input$species_by_month_pivot_cells_selected, {
     selected_row <- input$species_by_month_pivot_cells_selected
