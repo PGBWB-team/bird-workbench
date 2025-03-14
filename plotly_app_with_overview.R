@@ -242,7 +242,6 @@ server <- function(input, output, session) {
     total_species()
   }) %>% bindCache(input$confidence_selection_overview)
   
-
   # Observe Data Tables
   output$species_by_month_pivot <- renderDataTable({ create_table_pivot(cached_species_by_month()) })
   output$species_by_location_pivot <- renderDataTable({ create_table_pivot(cached_species_by_location()) })
@@ -290,7 +289,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_month_pivot_cells_selected, {
     selected_row <- input$species_by_month_pivot_cells_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- species_by_month()
+      species_list <- cached_species_by_month()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
@@ -301,7 +300,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_location_pivot_cells_selected, {
     selected_row <- input$species_by_location_pivot_cells_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- species_by_month()
+      species_list <- cached_species_by_location()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
@@ -312,7 +311,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_year_pivot_cells_selected, {
     selected_row <- input$species_by_year_pivot_cells_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- species_by_month()
+      species_list <- cached_species_by_year()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
@@ -323,7 +322,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_counts_t1_cells_selected, {
     selected_row <- input$species_counts_t1_cells_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- species_by_month()
+      species_list <- cached_species_counts()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
@@ -338,6 +337,46 @@ server <- function(input, output, session) {
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
     print(h3(name_title))
   })
+  
+  # Function for determining date range
+  get_week_date_range <- function(year, week) {
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
+    
+    # Calculate the start date of the target week
+    start_date <- first_sunday + (week - 1) * 7
+    
+    # Calculate the end date of the target week
+    end_date <- start_date + 6
+    
+    # Format the date range
+    paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
+  }
+  
+  get_week_from_date <- function(date) {
+    date <- as.Date(date, format = "%Y-%m-%d")
+    
+    # Extract year from the given date
+    year <- as.integer(format(date, "%Y"))
+    
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
+    
+    # Calculate the difference in days between the given date and the first Sunday
+    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
+    
+    # Determine week number
+    week_number <- (days_since_first_sunday %/% 7) +1
+    
+    return(week_number)
+    
+  }
   
   # List of locations
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
@@ -403,44 +442,6 @@ server <- function(input, output, session) {
   ## Application Build: Species-Specific Location Drilldown ##
   ############################################################
   
-  # Function for determining date range
-  get_week_date_range <- function(year, week) {
-    # Get the first day of the year
-    first_day <- as.Date(paste0(year, "-01-01"))
-    
-    # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
-    
-    # Calculate the start date of the target week
-    start_date <- first_sunday + (week - 1) * 7
-    
-    # Calculate the end date of the target week
-    end_date <- start_date + 6
-    
-    # Format the date range
-    paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
-  }
-  
-  get_week_from_date <- function(date) {
-    # Extract year from the given date
-    year <- as.integer(format(as.Date(date), "%Y"))
-    
-    # Get the first day of the year
-    first_day <- as.Date(paste0(year, "-01-01"))
-    
-    # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
-    
-    # Calculate the difference in days between the given date and the first Sunday
-    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
-    
-    # Determine week number
-    week_number <- (days_since_first_sunday %/% 7) +1
-    
-    return(week_number)
-    
-  }
-
   output$species_title <- renderUI({
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
     print(h3(name_title))
@@ -571,21 +572,29 @@ server <- function(input, output, session) {
     selected_data(event_data("plotly_selected"))
     
     find_audio_file <- function(row) {
+      if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
+        return(NULL)
+      }
       
       file_name <- basename(row[["Begin.Path"]])
+      
+      if (is.null(row[["Begin.Time..s."]])) {
+        return(NULL)
+      }
+      
       start_time <- as.numeric(row[["Begin.Time..s."]])
       
-      # TEMPORARY LOCAL DIRECTORY FOR TESTING
       file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
       
       audio_loc <- file.path(file_loc, file_name)
       
-      if (!file.exists(audio_loc)) {
+      if (is.null(audio_loc) || audio_loc == "" || !file.exists(audio_loc)) {
         return(NULL)
       }
       
       return(paste0(file_name, "***", start_time))
     }
+    
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
