@@ -403,9 +403,9 @@ server <- function(input, output, session) {
   #           "2023" = "#C77CFF",
   #           "2024" = "#E68613")
   # cols <- brewer.pal(5, "Greens")
-  cols <- brewer.pal(5, "YlGn")
+  # cols <- brewer.pal(5, "YlGn")
   # cols <- brewer.pal(5, "YlGnBu")
-  # cols <- brewer.pal(5, "YlOrBr")
+  cols <- brewer.pal(5, "YlOrBr")
   names(cols) <- c("2020", "2021", "2022", "2023", "2024")
   
   for (i in seq_along(location_list)) {
@@ -763,7 +763,8 @@ server <- function(input, output, session) {
     v <- ggspectro(audio_wav, ovlp = 50) +
       geom_tile(aes(fill = amplitude)) +
       ylim(0, 12) +
-      scale_fill_gradientn(colours = viridis(256, option = "B"))
+      scale_fill_gradientn(colours = viridis(256, option = "B"),
+                           limits = c(-90, 0))
     
     spectrogram(v)
   })
