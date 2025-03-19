@@ -259,11 +259,11 @@ server <- function(input, output, session) {
     filtered_data <- confidence_filter(all_data, default_confidence)  # Pre-filter once
     
     for (year in year_values) {
-      preload_cache[[paste0("species_by_month_", year)]] <- create_pivot_month(filtered_data, year)
-      preload_cache[[paste0("species_by_location_", year)]] <- create_pivot_location(filtered_data, year)
+      preload_cache[[paste0("species_by_month_", year, "_", default_confidence[1], "_", default_confidence[2])]] <- create_pivot_month(filtered_data, year)
+      preload_cache[[paste0("species_by_location_", year, "_", default_confidence[1], "_", default_confidence[2])]] <- create_pivot_location(filtered_data, year)
     }
     for (loc in loc_values) {
-      preload_cache[[paste0("species_by_year_", loc)]] <- create_pivot_year(filtered_data, loc)
+      preload_cache[[paste0("species_by_year_", loc, "_", default_confidence[1], "_", default_confidence[2])]] <- create_pivot_year(filtered_data, loc)
     }
   }
   
@@ -276,7 +276,7 @@ server <- function(input, output, session) {
   cached_species_by_month <- reactive({
     req(input$year_sel)
     req(input$confidence_selection_overview)
-    key <- paste0("species_by_month_", input$year_sel)
+    key <- paste0("species_by_month_", input$year_sel, "_", input$confidence_selection_overview[1], "_", input$confidence_selection_overview[2])
     if (exists(key, preload_cache)) {
       preload_cache[[key]]
     } else {
@@ -287,7 +287,7 @@ server <- function(input, output, session) {
   
   cached_species_by_location <- reactive({
     req(input$year_sel)
-    key <- paste0("species_by_location_", input$year_sel)
+    key <- paste0("species_by_location_", input$year_sel, "_", input$confidence_selection_overview[1], "_", input$confidence_selection_overview[2])
     if (exists(key, preload_cache)) {
       preload_cache[[key]]
     } else {
@@ -298,7 +298,8 @@ server <- function(input, output, session) {
   
   cached_species_by_year <- reactive({
     req(input$loc_sel)
-    key <- paste0("species_by_year_", input$loc_sel)
+    req(input$confidence_selection_overview)
+    key <- paste0("species_by_year_", input$loc_sel, "_", input$confidence_selection_overview[1], "_", input$confidence_selection_overview[2])
     if (exists(key, preload_cache)) {
       preload_cache[[key]]
     } else {
