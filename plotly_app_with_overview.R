@@ -20,6 +20,9 @@ library(shinyjs)
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
 
+# Set root folder for audio files
+audio_filepath <- "/Users/laurenwick/Dropbox/Lauren Wick/"
+
 ui <- navbarPage(
   id = "main_nav",
   title = "BirdNet-Analyzer Data Visualization",
@@ -169,7 +172,8 @@ server <- function(input, output, session) {
       mutate(Month = factor(month.abb[lubridate::month(as.Date(Date))], levels = month.abb)) %>%
       group_by(Common.Name, Species.Code, Month) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
-      pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0))
+      pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
     # Reorder the columns: Common.Name, Species.Code, then months in order
     month_order <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -181,7 +185,7 @@ server <- function(input, output, session) {
       }
     }
     
-    df <- df %>% select(Common.Name, Species.Code, all_of(month_order))
+    df <- df %>% select(Common.Name, Species.Code, all_of(month_order), Total.Count)
     return(df)
   }
 
@@ -191,7 +195,8 @@ server <- function(input, output, session) {
       mutate(Date = as.Date(Date), Year = year(Date)) %>%
       group_by(Common.Name, Species.Code, Year) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
-      pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0))
+      pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
     return(df)
   }
 
@@ -200,7 +205,8 @@ server <- function(input, output, session) {
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
       group_by(Common.Name, Species.Code, Location) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
-      pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0))
+      pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
     return(df)
   }
   
@@ -269,6 +275,7 @@ server <- function(input, output, session) {
   # Cached reactives with preloaded fallback
   cached_species_by_month <- reactive({
     req(input$year_sel)
+    req(input$confidence_selection_overview)
     key <- paste0("species_by_month_", input$year_sel)
     if (exists(key, preload_cache)) {
       preload_cache[[key]]
@@ -572,7 +579,7 @@ server <- function(input, output, session) {
                                          )) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
             scale_x_continuous(breaks = c(1, 5, 9, 13, 17, 21, 26, 30, 35, 39, 44, 48), 
-                               limits = c(1, 52),
+                               limits = c(0, 54),
                                labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
             labs(title = loc, x = "Month (Approximate)", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
@@ -647,6 +654,8 @@ server <- function(input, output, session) {
       }
       
       file_name <- basename(row[["Begin.Path"]])
+      year <- year(row[["Date"]])
+      file_loc <- paste0(audio_filepath, "Bio ", as.character(year), "/From Recorders")
       
       if (is.null(row[["Begin.Time..s."]])) {
         return(NULL)
@@ -654,7 +663,6 @@ server <- function(input, output, session) {
       
       start_time <- as.numeric(row[["Begin.Time..s."]])
       
-      file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
       
       audio_loc <- file.path(file_loc, file_name)
       
@@ -662,7 +670,7 @@ server <- function(input, output, session) {
         return(NULL)
       }
       
-      return(paste0(file_name, "***", start_time))
+      return(paste0(audio_loc, "***", start_time))
     }
     
     
@@ -752,8 +760,6 @@ server <- function(input, output, session) {
 
   
   observeEvent(input$play_button, {
-    # TEMPORARY LOCAL DIRECTORY FOR TESTING
-    file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
     
     # Grab value from slider for length of recording to extract
     recording_secs <- input$recording_length
@@ -765,7 +771,8 @@ server <- function(input, output, session) {
     
     # Take the value of input$select_button
     selectedRow <- input$play_button
-    audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    audio_file_path <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    audio_file <- basename(audio_file_path)
     begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
     audio_src <- paste0(strsplit(audio_file, ".wav"), "_", begin_time, "s.wav")
@@ -775,7 +782,8 @@ server <- function(input, output, session) {
       if (file.exists(dest_path)) file.remove(dest_path)
     }, delay = 10)
     
-    audio_loc <- file.path(file_loc, audio_file)
+    # audio_loc <- file.path(file_loc, audio_file)
+    audio_loc <- audio_file_path
     output_wav <- av_audio_convert(audio = audio_loc, 
                                    output = dest_path,
                                    start_time = begin_time,
