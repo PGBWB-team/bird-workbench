@@ -15,6 +15,7 @@ library(av)
 library(viridisLite)
 library(later)
 library(RColorBrewer)
+library(shinyjs)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
@@ -103,7 +104,16 @@ ui <- navbarPage(
                       plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px"))
              })
            )
-  )
+  ),
+  # Add your custom script for clearing Plotly selection
+  tags$script(HTML("
+  Shiny.addCustomMessageHandler('plotly-clearSelection', function(plotId) {
+    var plot = document.getElementById(plotId);
+    if (plot) {
+      Plotly.restyle(plot, {selectedpoints: [null]});
+    }
+  });
+"))
 )
 
 
@@ -163,6 +173,14 @@ server <- function(input, output, session) {
     # Reorder the columns: Common.Name, Species.Code, then months in order
     month_order <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    
+    # Add missing month columns with 0 values if they don't exist
+    for (month in month_order) {
+      if (!(month %in% names(df))) {
+        df[[month]] <- 0  # Add missing months with 0 values
+      }
+    }
+    
     df <- df %>% select(Common.Name, Species.Code, all_of(month_order))
     return(df)
   }
@@ -222,31 +240,79 @@ server <- function(input, output, session) {
     create_pivot_year(all_data, input$loc_sel)
   })
   
-  # Ensure year_sel exists before caching
+  # Predefined values for caching
+  year_values <- unique(as.character(lubridate::year(all_data$Date)))
+  loc_values <- unique(all_data$Location)
+  default_confidence <- c(0.7, 1) 
+  
+  # Initialize an environment to store precomputed results
+  preload_cache <- new.env()
+  
+  # Function to preload and store results
+  preload_data <- function() {
+    filtered_data <- confidence_filter(all_data, default_confidence)  # Pre-filter once
+    
+    for (year in year_values) {
+      preload_cache[[paste0("species_by_month_", year)]] <- create_pivot_month(filtered_data, year)
+      preload_cache[[paste0("species_by_location_", year)]] <- create_pivot_location(filtered_data, year)
+    }
+    for (loc in loc_values) {
+      preload_cache[[paste0("species_by_year_", loc)]] <- create_pivot_year(filtered_data, loc)
+    }
+  }
+  
+  # Run preloading at startup
+  observe({
+    isolate(preload_data())
+  })
+  
+  # Cached reactives with preloaded fallback
   cached_species_by_month <- reactive({
-    req(input$year_sel)  # Ensures year_sel exists before proceeding
-    species_by_month()
+    req(input$year_sel)
+    key <- paste0("species_by_month_", input$year_sel)
+    if (exists(key, preload_cache)) {
+      preload_cache[[key]]
+    } else {
+      filtered_data <- confidence_filter(all_data, input$confidence_selection_overview)
+      create_pivot_month(filtered_data, input$year_sel)
+    }
   }) %>% bindCache(input$confidence_selection_overview, input$year_sel)
   
   cached_species_by_location <- reactive({
     req(input$year_sel)
-    species_by_location()
+    key <- paste0("species_by_location_", input$year_sel)
+    if (exists(key, preload_cache)) {
+      preload_cache[[key]]
+    } else {
+      filtered_data <- confidence_filter(all_data, input$confidence_selection_overview)
+      create_pivot_location(filtered_data, input$year_sel)
+    }
   }) %>% bindCache(input$confidence_selection_overview, input$year_sel)
   
   cached_species_by_year <- reactive({
     req(input$loc_sel)
-    species_by_year()
+    key <- paste0("species_by_year_", input$loc_sel)
+    if (exists(key, preload_cache)) {
+      preload_cache[[key]]
+    } else {
+      filtered_data <- confidence_filter(all_data, input$confidence_selection_overview)
+      create_pivot_year(filtered_data, input$loc_sel)
+    }
   }) %>% bindCache(input$confidence_selection_overview, input$loc_sel)
   
   cached_species_counts <- reactive({
-    total_species()
+    if (exists("species_counts", preload_cache)) {
+      preload_cache[["species_counts"]]
+    } else {
+      total_species()
+    }
   }) %>% bindCache(input$confidence_selection_overview)
   
   # Observe Data Tables
+  output$species_counts_t1 <- renderDataTable({ create_table_pivot(cached_species_counts()) })
   output$species_by_month_pivot <- renderDataTable({ create_table_pivot(cached_species_by_month()) })
   output$species_by_location_pivot <- renderDataTable({ create_table_pivot(cached_species_by_location()) })
   output$species_by_year_pivot <- renderDataTable({ create_table_pivot(cached_species_by_year()) })
-  output$species_counts_t1 <- renderDataTable({ create_table_pivot(cached_species_counts()) })
   
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
@@ -555,6 +621,10 @@ server <- function(input, output, session) {
     selected_data(NULL)
     audio_player(NULL)
     spectrogram(NULL)
+    # Clear the plotly selection
+    for (i in seq_along(location_list)) {
+      session$sendCustomMessage("plotly-clearSelection", paste0("frequencyPlot_", i))
+    }
   })
 
   
