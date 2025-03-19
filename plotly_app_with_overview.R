@@ -794,7 +794,7 @@ server <- function(input, output, session) {
     
     audio_wav <- tuneR::readWave(output_wav)
     
-    v <- ggspectro(audio_wav, ovlp = 50) +
+    v <- seewave::ggspectro(audio_wav, ovlp = 50) +
       geom_tile(aes(fill = amplitude)) +
       ylim(0, 12) +
       scale_fill_gradientn(colours = viridis(256, option = "B"))
