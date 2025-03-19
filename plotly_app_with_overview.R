@@ -17,7 +17,7 @@ library(later)
 library(RColorBrewer)
 
 # Reading in all data:
-all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
+all_data <- fst::read_fst("/Users/mikeoconnor/Documents/Birdnet/Combined_2020-2024_V1.fst")
 
 ui <- navbarPage(
   id = "main_nav",
@@ -630,7 +630,7 @@ server <- function(input, output, session) {
       start_time <- as.numeric(row[["Begin.Time..s."]])
       
       # TEMPORARY LOCAL DIRECTORY FOR TESTING
-      file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
+      file_loc <- "/Volumes/Bio 2024/From Recorders"
       
       audio_loc <- file.path(file_loc, file_name)
       
@@ -728,7 +728,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$play_button, {
     # TEMPORARY LOCAL DIRECTORY FOR TESTING
-    file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
+    file_loc <- "/Volumes/Bio 2024/From Recorders"
     
     # Grab value from slider for length of recording to extract
     recording_secs <- input$recording_length
@@ -760,12 +760,12 @@ server <- function(input, output, session) {
     
     audio_wav <- tuneR::readWave(output_wav)
     
-    v <- ggspectro(audio_wav, ovlp = 50) +
+    v <- ggspectro(audio_wav, ovlp = 50, wl = 4096, flim = c(.2, 12)) +
       geom_tile(aes(fill = amplitude)) +
-      ylim(0, 12) +
+      ylim(.2, 12) +
       scale_fill_gradientn(colours = viridis(256, option = "B"),
-                           limits = c(-90, 0))
-    
+                           limits = c(-90, -6))
+
     spectrogram(v)
   })
   
