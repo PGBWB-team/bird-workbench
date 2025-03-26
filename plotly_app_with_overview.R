@@ -177,7 +177,8 @@ server <- function(input, output, session) {
       group_by(Common.Name, Species.Code, Year) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
+      select(Common.Name, Total.Count, everything())
     return(df)
   }
 
@@ -187,7 +188,8 @@ server <- function(input, output, session) {
       group_by(Common.Name, Species.Code, Location) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
+      select(Common.Name, Total.Count, everything())
     return(df)
   }
   
