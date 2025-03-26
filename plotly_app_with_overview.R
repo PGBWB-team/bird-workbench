@@ -40,9 +40,10 @@ ui <- navbarPage(
            
            selectInput(inputId = "sel_view", 
                        label = h3("View Selection"),
-                       choices = list("Species Totals" = "totals", "Species by Month" = "by_month",
-                                      "Species by Location" = "by_location", "Species by Year" = "by_year"),
-                       selected = "totals"),
+                       choices = list("Species by Month" = "by_month",
+                                      "Species by Location" = "by_location", 
+                                      "Species by Year" = "by_year"),
+                       selected = "by_month"),
           uiOutput("overview_view")),
   
   tabPanel(title = "Species-Specific Location Drilldown", 
@@ -197,14 +198,6 @@ server <- function(input, output, session) {
     return(data)
   }
   
-  # Reactive expression for species_by_month based on year selection
-  total_species <- reactive({
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    # New df of total count by species:
-    count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
-  }) 
-  
   # Predefined values for caching
   year_values <- unique(as.character(lubridate::year(all_data$Date)))
   loc_values <- unique(all_data$Location)
@@ -267,16 +260,7 @@ server <- function(input, output, session) {
     }
   }) %>% bindCache(input$confidence_selection_overview, input$loc_sel)
   
-  cached_species_counts <- reactive({
-    if (exists("species_counts", preload_cache)) {
-      preload_cache[["species_counts"]]
-    } else {
-      total_species()
-    }
-  }) %>% bindCache(input$confidence_selection_overview)
-  
   # Observe Data Tables
-  output$species_counts_t1 <- renderDataTable({ create_table_pivot(cached_species_counts()) })
   output$species_by_month_pivot <- renderDataTable({ create_table_pivot(cached_species_by_month()) })
   output$species_by_location_pivot <- renderDataTable({ create_table_pivot(cached_species_by_location()) })
   output$species_by_year_pivot <- renderDataTable({ create_table_pivot(cached_species_by_year()) })
@@ -294,11 +278,8 @@ server <- function(input, output, session) {
     loc_vals <- as.list(loc_vals[order(loc_vals)])
     names(loc_vals) <- as.list(loc_vals)
     loc_vals <- c(loc_vals, "All" = "All")
-    
-    if (input$sel_view == "totals") {
-      DT::dataTableOutput("species_counts_t1")
       
-    } else if (input$sel_view == "by_month") {
+    if (input$sel_view == "by_month") {
       tagList(
         selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_month_pivot")
