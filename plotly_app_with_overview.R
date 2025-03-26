@@ -127,26 +127,6 @@ server <- function(input, output, session) {
   ###############################################
   # Reactive value to store the selected species code
   species_click <- reactiveVal("acafly") # Default species code
-  
-  # Function to create table:
-  create_table <- function(data) {
-    datatable(
-      data.frame(Display = data$Display),
-      escape = FALSE,
-      extensions = "Buttons",
-      options = list(
-        dom = 'Bfrtip',
-        ordering = FALSE,
-        page_length = nrow(data),
-        buttons = c('csv', 'copy'),
-        lengthMenu = list(c(nrow(data)), c("All")) # Allow selecting "All"
-      ),
-      rownames = FALSE,
-      colnames = NULL,
-      # selection = "single"
-      selection = list(mode = "single", target = "cell")
-    )
-  }
 
   create_table_pivot <- function(data) {
     datatable(
@@ -224,27 +204,6 @@ server <- function(input, output, session) {
     # New df of total count by species:
     count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
   }) 
-  
-  species_by_month <- reactive({
-    req(input$year_sel)  # Ensure input exists before proceeding
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    create_pivot_month(all_data, input$year_sel)
-  })
-
-  species_by_location <- reactive({
-    req(input$year_sel) # Ensure input exists before proceeding
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    create_pivot_location(all_data, input$year_sel)
-  })
-
-  species_by_year <- reactive({
-    req(input$loc_sel)
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    create_pivot_year(all_data, input$loc_sel)
-  })
   
   # Predefined values for caching
   year_values <- unique(as.character(lubridate::year(all_data$Date)))
