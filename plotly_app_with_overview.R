@@ -143,7 +143,7 @@ server <- function(input, output, session) {
         columnDefs = list(list(visible=FALSE, targets="Species.Code"))
       ),
       rownames = FALSE,
-      selection = list(mode = "single", target = "cell")
+      selection = list(mode = "single", target = "row")
     )
   }
   
@@ -314,8 +314,8 @@ server <- function(input, output, session) {
   }) 
   
   # Observe clicks on the tables
-  observeEvent(input$species_by_month_pivot_cells_selected, {
-    selected_row <- input$species_by_month_pivot_cells_selected
+  observeEvent(input$species_by_month_pivot_rows_selected, {
+    selected_row <- input$species_by_month_pivot_rows_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
       species_list <- cached_species_by_month()
       if (selected_row[1] <= nrow(species_list)) {
@@ -325,8 +325,8 @@ server <- function(input, output, session) {
     }
   })
   
-  observeEvent(input$species_by_location_pivot_cells_selected, {
-    selected_row <- input$species_by_location_pivot_cells_selected
+  observeEvent(input$species_by_location_pivot_rows_selected, {
+    selected_row <- input$species_by_location_pivot_rows_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
       species_list <- cached_species_by_location()
       if (selected_row[1] <= nrow(species_list)) {
@@ -336,8 +336,8 @@ server <- function(input, output, session) {
     }
   })
   
-  observeEvent(input$species_by_year_pivot_cells_selected, {
-    selected_row <- input$species_by_year_pivot_cells_selected
+  observeEvent(input$species_by_year_pivot_rows_selected, {
+    selected_row <- input$species_by_year_pivot_rows_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
       species_list <- cached_species_by_year()
       if (selected_row[1] <= nrow(species_list)) {
