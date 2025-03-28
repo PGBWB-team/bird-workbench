@@ -70,17 +70,22 @@ ui <- navbarPage(
            ),
              
            uiOutput("species_title"),
+           uiOutput("species_link"),
+           
            tabsetPanel(
              id = "tab_selection",
              !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
                tabPanel(
                  title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
-                 plotlyOutput(outputId = paste0("frequencyPlot_", i))
+                 plotlyOutput(outputId = paste0("frequencyPlot_", i)),
+                 br()
                )
              })
            ),
            
            DT::dataTableOutput("filtered_data"),
+           
+           br(),
            
            layout_column_wrap(
              width = 1/2,
@@ -529,6 +534,16 @@ server <- function(input, output, session) {
     print(h3(name_title))
   })
   
+  output$species_link <- renderUI({
+    req(species_click())  # Ensure species_click() is not NULL
+    tags$a(
+      href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
+                    species_click(), "&mediaType=audio&sort=rating_rank_desc"),
+      target = "_blank",
+      "Open Bird Guide"
+    )
+  })
+  
   for (i in seq_along(location_list)) {
     local({
       loc <- location_list[i]
@@ -717,12 +732,6 @@ server <- function(input, output, session) {
         out_df <- out_df %>%
           rowwise() %>%
           mutate(
-            Website = paste0(
-              "<a href='", "https://search.macaulaylibrary.org/catalog?taxonCode=", Species.Code,
-              "&mediaType=audio&sort=rating_rank_desc",
-              "' target='_blank'>Open Bird Guide</a>"
-            ),
-            
             Sound.Button = list({
               audio_id <- find_audio_file(.data)
 
@@ -740,9 +749,9 @@ server <- function(input, output, session) {
             })
             
           ) %>%
-          select("Sound.Button", "Website", "Confidence", 
-                 "Begin.Time..s.", "End.Time..s.", "Date", "Week", 
-                 "Location", "Begin.Path", "Species.Code") %>%
+          select("Sound.Button", "Confidence", 
+                 "Begin.Time..s.", "Date", 
+                 "Begin.Path", "Species.Code") %>%
           ungroup()
         
         datatable(out_df, 
