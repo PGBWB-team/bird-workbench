@@ -20,6 +20,7 @@ library(RColorBrewer)
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
 
 ui <- navbarPage(
+  theme = bs_theme(version = 5),
   id = "main_nav",
   title = "BirdNet-Analyzer Data Visualization",
   selected = "ph_overview",
@@ -44,55 +45,83 @@ ui <- navbarPage(
   tabPanel(title = "Species-Specific Location Drilldown", 
            value = "species_loc_drilldown",
            
-           sidebarLayout(
-             
-             sidebarPanel(
+           layout_column_wrap(
+             width = 1/2,
+             card(
+               card_body(
+                 sliderInput(
+                   inputId = "confidence_selection", 
+                   label = "Confidence Level",
+                   min = 0, 
+                   max = 1, 
+                   value = c(0.7, 1)
+                 )
+               )
+               
+             ),
+             card(
                radioButtons(
                  inputId = "time_interval",
-                 label = "Time Interval", 
+                 label = "Time Interval",
                  choices = c("Week" = "weekly", "Month" = "monthly"), 
                  selected = "weekly"
-               ),
-               
-               sliderInput(
-                 inputId = "confidence_selection", 
-                 label = "Confidence Level", 
-                 min = 0, 
-                 max = 1, 
-                 value = c(0.7, 1)
-               ),
-               
-               sliderInput(
-                 inputId = "recording_length",
-                 label = "Recording Length (seconds)",
-                 min = 3,
-                 max = 30,
-                 value = 10,
-                 step = 1,
-                 round = TRUE
+               )
+             )
+           ),
+             
+           uiOutput("species_title"),
+           tabsetPanel(
+             id = "tab_selection",
+             !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
+               tabPanel(
+                 title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
+                 plotlyOutput(outputId = paste0("frequencyPlot_", i))
+               )
+             })
+           ),
+           
+           DT::dataTableOutput("filtered_data"),
+           
+           layout_column_wrap(
+             width = 1/2,
+             card(
+               card_header("Audio Segment Parameters"),
+               card_body(
+                 sliderInput(
+                   inputId = "recording_length",
+                   label = "Recording Length (seconds)",
+                   min = 3,
+                   max = 30,
+                   value = 10,
+                   step = 1,
+                   round = TRUE
+                 ),
+                 
+                 sliderInput(
+                   inputId = "recording_offset",
+                   label = "Recording Offset",
+                   min = 0,
+                   max = 30,
+                   value = 0,
+                   step = 1,
+                   round = TRUE
+                 )
                )
              ),
              
-             mainPanel(
-               uiOutput("species_title"),
-               tabsetPanel(
-                 id = "tab_selection",
-                 !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
-                   tabPanel(
-                     title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
-                     plotlyOutput(outputId = paste0("frequencyPlot_", i))
-                   )
-                 })
-               ),
-               
-               DT::dataTableOutput("filtered_data"),
-               uiOutput("audio_player"),
-               plotOutput("spectrogram")
-               
-             )
-           )
-     
-  ),
+             card(
+               card_header("Spectrogram Parameters"),
+               card_body(
+                 p("Insert Parameters Here")
+                 )
+               )
+             ),
+
+           
+           uiOutput("audio_player"),
+           plotOutput("spectrogram")
+
+           ),
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -732,6 +761,8 @@ server <- function(input, output, session) {
     
     # Grab value from slider for length of recording to extract
     recording_secs <- input$recording_length
+    
+    recording_offset <- input$recording_offset
     
     # Define the temporary directory and stream the data
     if (!dir.exists("www")) {
