@@ -783,7 +783,7 @@ server <- function(input, output, session) {
     audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
     begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
-    audio_src <- paste0(strsplit(audio_file, ".wav"), "_", begin_time, "s.wav")
+    audio_src <- paste0(sub("\\.wav$", "", audio_file), "_", begin_time, "s.wav")
     dest_path <- file.path("www", audio_src)
     
     later::later(function() {
@@ -793,7 +793,7 @@ server <- function(input, output, session) {
     audio_loc <- file.path(file_loc, audio_file)
     output_wav <- av_audio_convert(audio = audio_loc, 
                                    output = dest_path,
-                                   start_time = begin_time,
+                                   start_time = begin_time - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
     
     audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
