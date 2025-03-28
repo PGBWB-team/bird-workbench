@@ -109,7 +109,7 @@ ui <- navbarPage(
                  
                  sliderInput(
                    inputId = "recording_offset",
-                   label = "Recording Offset",
+                   label = "Recording Offset (seconds)",
                    min = 0,
                    max = 30,
                    value = 0,
@@ -129,6 +129,7 @@ ui <- navbarPage(
 
            
            uiOutput("audio_player"),
+           downloadButton("audioDownload", "Download Audio"),
            plotOutput("spectrogram")
 
            ),
@@ -618,11 +619,20 @@ server <- function(input, output, session) {
   # Create reactive values to store audio and spectrogram
   audio_player <- reactiveVal(NULL)
   spectrogram <- reactiveVal(NULL)
+  audio_file_path <- reactiveVal(NULL)
 
   observeEvent(input$tab_selection, {
     selected_data(NULL)
     audio_player(NULL)
     spectrogram(NULL)
+    
+    if (!is.null(audio_file_path())) {
+      if (file.exists(audio_file_path())) {
+        file.remove(audio_file_path())
+      }
+    }
+    audio_file_path(NULL)
+    
     # Clear the plotly selection
     for (i in seq_along(location_list)) {
       session$sendCustomMessage("plotly-clearSelection", paste0("frequencyPlot_", i))
@@ -746,7 +756,6 @@ server <- function(input, output, session) {
       }
     })
   })
-
   
   observeEvent(input$play_button, {
     
@@ -762,25 +771,20 @@ server <- function(input, output, session) {
     
     # Take the value of input$select_button
     selectedRow <- input$play_button
-    audio_file_path <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
-    audio_file <- basename(audio_file_path)
+    audio_file_path_raw <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    audio_file <- basename(audio_file_path_raw)
     begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
     audio_src <- paste0(sub("\\.wav$", "", audio_file), "_", begin_time, "s.wav")
     dest_path <- file.path("www", audio_src)
     
-    later::later(function() {
-      if (file.exists(dest_path)) file.remove(dest_path)
-    }, delay = 10)
-    
-    # audio_loc <- file.path(file_loc, audio_file)
-    audio_loc <- audio_file_path
-    output_wav <- av_audio_convert(audio = audio_loc, 
+    output_wav <- av_audio_convert(audio = audio_file_path_raw, 
                                    output = dest_path,
                                    start_time = begin_time - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
     
     audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
+    audio_file_path(dest_path)
     
     audio_wav <- tuneR::readWave(output_wav)
     
@@ -798,6 +802,17 @@ server <- function(input, output, session) {
     req(audio_player())
     audio_player()
   })
+  
+  output$audioDownload <- downloadHandler(
+    filename = function() {
+      paste("extracted_audio.wav")
+    },
+    content = function(file) {
+      req(audio_file_path())
+      file.copy(audio_file_path(), file)
+    },
+    contentType = "audio/wav"
+  )
   
   output$spectrogram <- renderPlot({
     req(spectrogram())
