@@ -24,6 +24,7 @@ all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70co
 audio_filepath <- "/Users/laurenwick/Dropbox/Lauren Wick/"
 
 ui <- navbarPage(
+  theme = bs_theme(version = 5),
   id = "main_nav",
   title = "BirdNet-Analyzer Data Visualization",
   selected = "ph_overview",
@@ -49,55 +50,88 @@ ui <- navbarPage(
   tabPanel(title = "Species-Specific Location Drilldown", 
            value = "species_loc_drilldown",
            
-           sidebarLayout(
-             
-             sidebarPanel(
+           layout_column_wrap(
+             width = 1/2,
+             card(
+               card_body(
+                 sliderInput(
+                   inputId = "confidence_selection", 
+                   label = "Confidence Level",
+                   min = 0, 
+                   max = 1, 
+                   value = c(0.7, 1)
+                 )
+               )
+               
+             ),
+             card(
                radioButtons(
                  inputId = "time_interval",
-                 label = "Time Interval", 
+                 label = "Time Interval",
                  choices = c("Week" = "weekly", "Month" = "monthly"), 
                  selected = "weekly"
-               ),
-               
-               sliderInput(
-                 inputId = "confidence_selection", 
-                 label = "Confidence Level", 
-                 min = 0, 
-                 max = 1, 
-                 value = c(0.7, 1)
-               ),
-               
-               sliderInput(
-                 inputId = "recording_length",
-                 label = "Recording Length (seconds)",
-                 min = 3,
-                 max = 30,
-                 value = 10,
-                 step = 1,
-                 round = TRUE
+               )
+             )
+           ),
+             
+           uiOutput("species_title"),
+           uiOutput("species_link"),
+           
+           tabsetPanel(
+             id = "tab_selection",
+             !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
+               tabPanel(
+                 title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
+                 plotlyOutput(outputId = paste0("frequencyPlot_", i)),
+                 br()
+               )
+             })
+           ),
+           
+           DT::dataTableOutput("filtered_data"),
+           
+           br(),
+           
+           layout_column_wrap(
+             width = 1/2,
+             card(
+               card_header("Audio Segment Parameters"),
+               card_body(
+                 sliderInput(
+                   inputId = "recording_length",
+                   label = "Recording Length (seconds)",
+                   min = 3,
+                   max = 30,
+                   value = 10,
+                   step = 1,
+                   round = TRUE
+                 ),
+                 
+                 sliderInput(
+                   inputId = "recording_offset",
+                   label = "Recording Offset",
+                   min = 0,
+                   max = 30,
+                   value = 0,
+                   step = 1,
+                   round = TRUE
+                 )
                )
              ),
              
-             mainPanel(
-               uiOutput("species_title"),
-               tabsetPanel(
-                 id = "tab_selection",
-                 !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
-                   tabPanel(
-                     title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
-                     plotlyOutput(outputId = paste0("frequencyPlot_", i))
-                   )
-                 })
-               ),
-               
-               DT::dataTableOutput("filtered_data"),
-               uiOutput("audio_player"),
-               plotOutput("spectrogram")
-               
-             )
-           )
-     
-  ),
+             card(
+               card_header("Spectrogram Parameters"),
+               card_body(
+                 p("Insert Parameters Here")
+                 )
+               )
+             ),
+
+           
+           uiOutput("audio_player"),
+           plotOutput("spectrogram")
+
+           ),
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -407,9 +441,9 @@ server <- function(input, output, session) {
   #           "2023" = "#C77CFF",
   #           "2024" = "#E68613")
   # cols <- brewer.pal(5, "Greens")
-  cols <- brewer.pal(5, "YlGn")
+  # cols <- brewer.pal(5, "YlGn")
   # cols <- brewer.pal(5, "YlGnBu")
-  # cols <- brewer.pal(5, "YlOrBr")
+  cols <- brewer.pal(5, "YlOrBr")
   names(cols) <- c("2020", "2021", "2022", "2023", "2024")
   
   for (i in seq_along(location_list)) {
@@ -464,6 +498,16 @@ server <- function(input, output, session) {
   output$species_title <- renderUI({
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
     print(h3(name_title))
+  })
+  
+  output$species_link <- renderUI({
+    req(species_click())  # Ensure species_click() is not NULL
+    tags$a(
+      href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
+                    species_click(), "&mediaType=audio&sort=rating_rank_desc"),
+      target = "_blank",
+      "Open Bird Guide"
+    )
   })
   
   for (i in seq_along(location_list)) {
@@ -667,12 +711,6 @@ server <- function(input, output, session) {
         out_df <- out_df %>%
           rowwise() %>%
           mutate(
-            Website = paste0(
-              "<a href='", "https://search.macaulaylibrary.org/catalog?taxonCode=", Species.Code,
-              "&mediaType=audio&sort=rating_rank_desc",
-              "' target='_blank'>Open Bird Guide</a>"
-            ),
-            
             Sound.Button = list({
               audio_id <- find_audio_file(.data)
 
@@ -690,9 +728,9 @@ server <- function(input, output, session) {
             })
             
           ) %>%
-          select("Sound.Button", "Website", "Confidence", 
-                 "Begin.Time..s.", "End.Time..s.", "Date", "Week", 
-                 "Location", "Begin.Path", "Species.Code") %>%
+          select("Sound.Button", "Confidence", 
+                 "Begin.Time..s.", "Date", 
+                 "Begin.Path", "Species.Code") %>%
           ungroup()
         
         datatable(out_df, 
@@ -710,6 +748,8 @@ server <- function(input, output, session) {
     # Grab value from slider for length of recording to extract
     recording_secs <- input$recording_length
     
+    recording_offset <- input$recording_offset
+    
     # Define the temporary directory and stream the data
     if (!dir.exists("www")) {
       dir.create("www")
@@ -721,7 +761,7 @@ server <- function(input, output, session) {
     audio_file <- basename(audio_file_path)
     begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
-    audio_src <- paste0(strsplit(audio_file, ".wav"), "_", begin_time, "s.wav")
+    audio_src <- paste0(sub("\\.wav$", "", audio_file), "_", begin_time, "s.wav")
     dest_path <- file.path("www", audio_src)
     
     later::later(function() {
@@ -732,7 +772,7 @@ server <- function(input, output, session) {
     audio_loc <- audio_file_path
     output_wav <- av_audio_convert(audio = audio_loc, 
                                    output = dest_path,
-                                   start_time = begin_time,
+                                   start_time = begin_time - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
     
     audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
@@ -742,7 +782,8 @@ server <- function(input, output, session) {
     v <- seewave::ggspectro(audio_wav, ovlp = 50) +
       geom_tile(aes(fill = amplitude)) +
       ylim(0, 12) +
-      scale_fill_gradientn(colours = viridis(256, option = "B"))
+      scale_fill_gradientn(colours = viridis(256, option = "B"),
+                           limits = c(-90, 0))
     
     spectrogram(v)
   })
