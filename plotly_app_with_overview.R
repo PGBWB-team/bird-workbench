@@ -521,6 +521,11 @@ server <- function(input, output, session) {
         # Subset by species:
         species_data <- subset(all_data, Species.Code==species_click() & Location == loc)
         
+        # Check if species_data has any rows
+        validate(
+          need(nrow(species_data) > 0, "No observations available for this species at this location.")
+        )
+        
         # Extract Week, Year, and create Week.Year.Loc variable
         species_data <- species_data %>%
           mutate(
@@ -589,7 +594,7 @@ server <- function(input, output, session) {
                                            "<br>Count:", Count
                                          ))) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
-            scale_x_continuous(breaks = 1:12, limits = c(1, 12)) +
+            scale_x_continuous(breaks = 1:12, limits = c(0, 13)) +
             labs(title = loc, x = "Month", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
             theme_minimal()
