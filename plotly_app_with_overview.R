@@ -805,7 +805,8 @@ server <- function(input, output, session) {
   
   output$audioDownload <- downloadHandler(
     filename = function() {
-      paste("extracted_audio.wav")
+      req(audio_file_path())
+      paste(basename(audio_file_path()))
     },
     content = function(file) {
       req(audio_file_path())
