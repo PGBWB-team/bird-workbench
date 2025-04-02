@@ -31,20 +31,61 @@ ui <- navbarPage(
   tabPanel(title = "Prairie Haven Overview",
            value = "ph_overview",
            
-           sliderInput(
-             inputId = "confidence_selection_overview", 
-             label = "Confidence Level", 
-             min = 0, 
-             max = 1, 
-             value = c(0.7, 1)
+           fixedPanel(
+             top = 70, left = 30, width = "700px", height = "250px",
+             style = "z-index: 1000",
+             draggable = TRUE,
+             layout_column_wrap(
+               width = 1/2,
+               card(
+                 height = "225px",
+                 card_body(
+                   tags$div(
+                     style = "position: relative;",
+                     sliderInput(
+                       inputId = "confidence_selection_overview", 
+                       label = "BirdNET Happiness Scale",
+                       min = 0, 
+                       max = 1, 
+                       value = c(0.7, 1),
+                       step = 0.01
+                     ),
+                     tags$div(
+                       style = "display: flex; justify-content: space-between; padding: 0 12px; margin-top: -10px; font-size: 11px;",
+                       tags$span("Happy"),
+                       tags$span("Okay"),
+                       tags$span("Not Happy")
+                     )
+                   )
+                 )
+               )
+               ,
+               card(
+                 selectInput(inputId = "sel_view", 
+                             label = "Pivot Table Selection",
+                             choices = list("Species by Month" = "by_month",
+                                            "Species by Location" = "by_location", 
+                                            "Species by Year" = "by_year"),
+                             selected = "by_month")
+               )
+             )
            ),
            
-           selectInput(inputId = "sel_view", 
-                       label = h3("View Selection"),
-                       choices = list("Species by Month" = "by_month",
-                                      "Species by Location" = "by_location", 
-                                      "Species by Year" = "by_year"),
-                       selected = "by_month"),
+           # sliderInput(
+           #   inputId = "confidence_selection_overview", 
+           #   label = "Confidence Level", 
+           #   min = 0, 
+           #   max = 1, 
+           #   value = c(0.7, 1)
+           # ),
+           # 
+           # selectInput(inputId = "sel_view", 
+           #             label = h3("View Selection"),
+           #             choices = list("Species by Month" = "by_month",
+           #                            "Species by Location" = "by_location", 
+           #                            "Species by Year" = "by_year"),
+           #             selected = "by_month"),
+           
           uiOutput("overview_view")),
   
   tabPanel(title = "Species-Specific Location Drilldown", 
@@ -92,47 +133,35 @@ ui <- navbarPage(
            
            br(),
            
-           layout_column_wrap(
-             width = 1/2,
-             card(
-               card_header("Audio Segment Parameters"),
-               card_body(
-                 sliderInput(
-                   inputId = "recording_length",
-                   label = "Recording Length (seconds)",
-                   min = 3,
-                   max = 30,
-                   value = 10,
-                   step = 1,
-                   round = TRUE
-                 ),
-                 
-                 sliderInput(
-                   inputId = "recording_offset",
-                   label = "Recording Offset (seconds)",
-                   min = 0,
-                   max = 30,
-                   value = 0,
-                   step = 1,
-                   round = TRUE
-                 )
+           card(
+             card_header("Audio Segment Parameters"),
+             card_body(
+               sliderInput(
+                 inputId = "recording_length",
+                 label = "Recording Length (seconds)",
+                 min = 3,
+                 max = 30,
+                 value = 10,
+                 step = 1,
+                 round = TRUE
+               ),
+               
+               sliderInput(
+                 inputId = "recording_offset",
+                 label = "Recording Offset (seconds)",
+                 min = 0,
+                 max = 30,
+                 value = 3,
+                 step = 1,
+                 round = TRUE
                )
-             ),
-             
-             card(
-               card_header("Spectrogram Parameters"),
-               card_body(
-                 p("Insert Parameters Here")
-                 )
-               )
-             ),
-
+             )
+           ),
            
            uiOutput("audio_player"),
            downloadButton("audioDownload", "Download Audio"),
-           plotOutput("spectrogram")
-
-           ),
+           plotOutput("spectrogram")),
+           
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -153,7 +182,9 @@ ui <- navbarPage(
     }
   });
 "))
-)
+  )
+
+
 
 
 server <- function(input, output, session) {
@@ -332,19 +363,46 @@ server <- function(input, output, session) {
       
     if (input$sel_view == "by_month") {
       tagList(
-        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
+        layout_columns(
+          card(
+            height = "285px",
+            card_body(
+              selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"))
+          ),
+          col_widths = c(-8, 4)
+        ),
+        br(),
+        # selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_month_pivot")
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
-        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
+        layout_columns(
+          card(
+            height = "285px",
+            card_body(
+              selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"))
+          ),
+          col_widths = c(-8, 4)
+        ),
+        br(),
+        # selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_location_pivot")
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
-        selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"),
+        layout_columns(
+          card(
+            height = "285px",
+            card_body(
+              selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"))
+          ),
+          col_widths = c(-8, 4)
+        ),
+        br(),
+        # selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"),
         DT::dataTableOutput("species_by_year_pivot")
       )
     }
@@ -498,7 +556,7 @@ server <- function(input, output, session) {
   
   output$species_title <- renderUI({
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
-    print(h3(name_title))
+    h3(name_title)
   })
   
   output$species_link <- renderUI({
@@ -507,7 +565,7 @@ server <- function(input, output, session) {
       href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
                     species_click(), "&mediaType=audio&sort=rating_rank_desc"),
       target = "_blank",
-      "Open Bird Guide"
+      h5("[Open Bird Guide]")
     )
   })
   
