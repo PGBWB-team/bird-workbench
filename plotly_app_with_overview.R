@@ -52,9 +52,9 @@ ui <- navbarPage(
                      ),
                      tags$div(
                        style = "display: flex; justify-content: space-between; padding: 0 12px; margin-top: -10px; font-size: 11px;",
-                       tags$span("Happy"),
+                       tags$span("Not Happy"),
                        tags$span("Okay"),
-                       tags$span("Not Happy")
+                       tags$span("Happy")
                      )
                    )
                  )
@@ -683,6 +683,8 @@ server <- function(input, output, session) {
     selected_data(NULL)
     audio_player(NULL)
     spectrogram(NULL)
+    audio_player(NULL)
+    output$audio_player <- NULL
     
     if (!is.null(audio_file_path())) {
       if (file.exists(audio_file_path())) {
@@ -815,34 +817,49 @@ server <- function(input, output, session) {
     })
   })
   
+  selected_audio <- reactiveValues(file = NULL, begin_time = NULL)
+  
   observeEvent(input$play_button, {
+    selectedRow <- input$play_button
+    audio_file_path_raw <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
-    # Grab value from slider for length of recording to extract
+    selected_audio$file <- audio_file_path_raw
+    selected_audio$begin_time <- begin_time
+    
+    update_audio_and_spectrogram()
+  })
+  
+  observeEvent(c(input$recording_length, input$recording_offset), {
+    if (!is.null(selected_audio$file)) {
+      update_audio_and_spectrogram()
+    }
+  })
+  
+  update_audio_and_spectrogram <- reactive({
+    req(selected_audio$file)
+    
     recording_secs <- input$recording_length
-    
     recording_offset <- input$recording_offset
     
-    # Define the temporary directory and stream the data
     if (!dir.exists("www")) {
       dir.create("www")
     }
     
-    # Take the value of input$select_button
-    selectedRow <- input$play_button
-    audio_file_path_raw <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
-    audio_file <- basename(audio_file_path_raw)
-    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
-    
-    audio_src <- paste0(sub("\\.wav$", "", audio_file), "_", begin_time, "s.wav")
+    audio_src <- paste0(sub("\\.wav$", "", basename(selected_audio$file)), "_", selected_audio$begin_time, "s.wav")
     dest_path <- file.path("www", audio_src)
     
-    output_wav <- av_audio_convert(audio = audio_file_path_raw, 
+    output_wav <- av_audio_convert(audio = selected_audio$file, 
                                    output = dest_path,
-                                   start_time = begin_time - as.numeric(recording_offset),
+                                   start_time = selected_audio$begin_time - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
     
-    audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
     audio_file_path(dest_path)
+    
+    # Force UI refresh by generating a new audio tag
+    output$audio_player <- renderUI({
+      tags$audio(src = audio_src, type = "audio/wav", controls = TRUE, autoplay = TRUE)
+    })
     
     audio_wav <- tuneR::readWave(output_wav)
     
@@ -853,12 +870,6 @@ server <- function(input, output, session) {
                            limits = c(-90, 0))
     
     spectrogram(v)
-  })
-  
-  # Show the name of the employee that has been clicked on
-  output$audio_player <- renderUI({
-    req(audio_player())
-    audio_player()
   })
   
   output$audioDownload <- downloadHandler(
@@ -872,6 +883,12 @@ server <- function(input, output, session) {
     },
     contentType = "audio/wav"
   )
+  
+  # Show the name of the employee that has been clicked on
+  output$audio_player <- renderUI({
+    req(audio_player())
+    audio_player()
+  })
   
   output$spectrogram <- renderPlot({
     req(spectrogram())
