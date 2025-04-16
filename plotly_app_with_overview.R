@@ -32,7 +32,7 @@ ui <- navbarPage(
   
   # Shared sliderInput for confidence
     card(
-      height = "225px",
+      height = "185px",
       card_body(
         tags$div(
           style = "position: relative; width: 86%; margin: 0 auto;",  # align block
@@ -47,9 +47,9 @@ ui <- navbarPage(
           ),
           tags$div(
             style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
-            tags$span("Happy"),
+            tags$span("Not Happy"),
             tags$span("Okay"),
-            tags$span("Not Happy")
+            tags$span("Happy")
           )
         )
       )
@@ -415,10 +415,11 @@ server <- function(input, output, session) {
       ) %>%
       mutate(Time = as_hms(Date.Time)) %>%
       mutate(Time.Of.Day = case_when(
-        Time < hms(11, 30, 0) ~ "Morning",
-        Time == hms(11, 30, 0) ~ "Afternoon",
-        Time > hms(11, 30, 0) ~ "Night"
+        Time < hms(0, 30, 11) ~ "Morning",
+        Time == hms(0, 30, 11) ~ "Afternoon",
+        Time > hms(0, 30, 11) ~ "Night"
       )) %>%
+      mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
       select(Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Time, Time.Of.Day, Mean.Confidence, Median.Confidence, SD.Confidence )
       # left_join(df_top_birds, by = "Begin.Path")
