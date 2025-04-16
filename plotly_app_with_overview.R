@@ -13,7 +13,6 @@ library(tuneR)
 library(seewave)
 library(av)
 library(viridisLite)
-library(later)
 library(RColorBrewer)
 library(shinyjs)
 
@@ -247,22 +246,20 @@ server <- function(input, output, session) {
     return(data)
   }
   
-  # Predefined values for caching
   year_values <- unique(as.character(lubridate::year(all_data$Date)))
   year_values <- as.list(year_values[order(year_values)])
   names(year_values) <- as.list(year_values)
-  year_values <- c(year_values, "All"="All")
+  year_values <- c(year_values, "All" = "All")
   
   loc_values <- unique(all_data$Location)
   loc_values <- as.list(loc_values[order(loc_values)])
   names(loc_values) <- as.list(loc_values)
   loc_values <- c(loc_values, "All" = "All")
   
-  default_confidence <- c(0.7, 1) 
+  # Confidence default
+  default_confidence <- c(0.7, 1)
   
-  # Initialize an environment to store precomputed results
-  preload_cache <- new.env()
-  
+  # Reactive filtered data
   filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
   
   observe({
@@ -272,62 +269,38 @@ server <- function(input, output, session) {
     filtered_data(new_data)
   })
   
-  # Function to preload and store results
-  preload_data <- function() {
-    
-    for (year in year_values) {
-      preload_cache[[paste0("species_by_month_", year, "_", default_confidence[1], "_", default_confidence[2])]] <- create_pivot_month(filtered_data(), year)
-      preload_cache[[paste0("species_by_location_", year, "_", default_confidence[1], "_", default_confidence[2])]] <- create_pivot_location(filtered_data(), year)
-    }
-    for (loc in loc_values) {
-      preload_cache[[paste0("species_by_year_", loc, "_", default_confidence[1], "_", default_confidence[2])]] <- create_pivot_year(filtered_data(), loc)
-    }
-  }
+  # Reactives that generate pivots on demand
+  species_by_month <- reactive({
+    req(input$year_sel)
+    req(filtered_data())
+    create_pivot_month(filtered_data(), input$year_sel)
+  }) %>% bindCache(input$year_sel, input$confidence_selection_overview)
   
-  # Run preloading at startup
-  observe({
-    isolate(preload_data())
+  species_by_location <- reactive({
+    req(input$year_sel)
+    req(filtered_data())
+    create_pivot_location(filtered_data(), input$year_sel)
+  }) %>% bindCache(input$year_sel, input$confidence_selection_overview)
+  
+  species_by_year <- reactive({
+    req(input$loc_sel)
+    req(filtered_data())
+    create_pivot_year(filtered_data(), input$loc_sel)
+  }) %>% bindCache(input$loc_sel, input$confidence_selection_overview)
+  
+  # Table rendering
+  output$species_by_month_pivot <- renderDataTable({
+    create_table_pivot(species_by_month())
   })
   
-  # Cached reactives with preloaded fallback
-  cached_species_by_month <- reactive({
-    req(input$year_sel)
-    req(input$confidence_selection_overview)
-    key <- paste0("species_by_month_", input$year_sel, "_", input$confidence_selection_overview[1], "_", input$confidence_selection_overview[2])
-    if (exists(key, preload_cache)) {
-      preload_cache[[key]]
-    } else {
-      create_pivot_month(filtered_data(), input$year_sel)
-    }
-  }) %>% bindCache(input$confidence_selection_overview, input$year_sel)
+  output$species_by_location_pivot <- renderDataTable({
+    create_table_pivot(species_by_location())
+  })
   
-  cached_species_by_location <- reactive({
-    req(input$year_sel)
-    req(input$confidence_selection_overview)
-    key <- paste0("species_by_location_", input$year_sel, "_", input$confidence_selection_overview[1], "_", input$confidence_selection_overview[2])
-    if (exists(key, preload_cache)) {
-      preload_cache[[key]]
-    } else {
-      create_pivot_location(filtered_data(), input$year_sel)
-    }
-  }) %>% bindCache(input$confidence_selection_overview, input$year_sel)
-  
-  cached_species_by_year <- reactive({
-    req(input$loc_sel)
-    req(input$confidence_selection_overview)
-    key <- paste0("species_by_year_", input$loc_sel, "_", input$confidence_selection_overview[1], "_", input$confidence_selection_overview[2])
-    if (exists(key, preload_cache)) {
-      preload_cache[[key]]
-    } else {
-      create_pivot_year(filtered_data(), input$loc_sel)
-    }
-  }) %>% bindCache(input$confidence_selection_overview, input$loc_sel)
-  
-  # Observe Data Tables
-  output$species_by_month_pivot <- renderDataTable({ create_table_pivot(cached_species_by_month()) })
-  output$species_by_location_pivot <- renderDataTable({ create_table_pivot(cached_species_by_location()) })
-  output$species_by_year_pivot <- renderDataTable({ create_table_pivot(cached_species_by_year()) })
-  
+  output$species_by_year_pivot <- renderDataTable({
+    create_table_pivot(species_by_year())
+  })
+
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
     # Creating valid choices for year filtering
@@ -366,7 +339,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_month_pivot_rows_selected, {
     selected_row <- input$species_by_month_pivot_rows_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- cached_species_by_month()
+      species_list <- species_by_month()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
@@ -377,7 +350,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_location_pivot_rows_selected, {
     selected_row <- input$species_by_location_pivot_rows_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- cached_species_by_location()
+      species_list <- species_by_location()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
@@ -388,7 +361,7 @@ server <- function(input, output, session) {
   observeEvent(input$species_by_year_pivot_rows_selected, {
     selected_row <- input$species_by_year_pivot_rows_selected
     if (!is.null(selected_row) && length(selected_row) > 0) {
-      species_list <- cached_species_by_year()
+      species_list <- species_by_year()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
