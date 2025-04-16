@@ -13,11 +13,14 @@ library(tuneR)
 library(seewave)
 library(av)
 library(viridisLite)
-library(later)
 library(RColorBrewer)
+library(shinyjs)
 
 # Reading in all data:
 all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
+
+# Set root folder for audio files
+audio_filepath <- "/Users/laurenwick/Dropbox/Lauren Wick/"
 
 ui <- navbarPage(
   theme = bs_theme(version = 5),
@@ -27,19 +30,42 @@ ui <- navbarPage(
   tabPanel(title = "Prairie Haven Overview",
            value = "ph_overview",
            
-           sliderInput(
-             inputId = "confidence_selection_overview", 
-             label = "Confidence Level", 
-             min = 0, 
-             max = 1, 
-             value = c(0.7, 1)
-           ),
+      
+             layout_column_wrap(
+               width = 1/2,
+               card(
+                 height = "225px",
+                 card_body(
+                   tags$div(
+                     style = "position: relative;",
+                     sliderInput(
+                       inputId = "confidence_selection_overview", 
+                       label = "BirdNET Happiness Scale",
+                       min = 0, 
+                       max = 1, 
+                       value = c(0.7, 1),
+                       step = 0.01
+                     ),
+                     tags$div(
+                       style = "width: 55%; margin-left: 1%; display: flex; justify-content: space-between; font-size: 11px; margin-top: -10px;",
+                       tags$span("Not Happy"),
+                       tags$span("Okay"),
+                       tags$span("Happy")
+                     )
+                   )
+                 )
+               )
+               ,
+               card(
+                 selectInput(inputId = "sel_view", 
+                             label = "Pivot Table Selection",
+                             choices = list("Species by Month" = "by_month",
+                                            "Species by Location" = "by_location", 
+                                            "Species by Year" = "by_year"),
+                             selected = "by_month")
+               )
+             ),
            
-           selectInput(inputId = "sel_view", 
-                       label = h3("View Selection"),
-                       choices = list("Species Totals" = "totals", "Species by Month" = "by_month",
-                                      "Species by Location" = "by_location", "Species by Year" = "by_year"),
-                       selected = "totals"),
           uiOutput("overview_view")),
   
   tabPanel(title = "Species-Specific Location Drilldown", 
@@ -87,46 +113,35 @@ ui <- navbarPage(
            
            br(),
            
-           layout_column_wrap(
-             width = 1/2,
-             card(
-               card_header("Audio Segment Parameters"),
-               card_body(
-                 sliderInput(
-                   inputId = "recording_length",
-                   label = "Recording Length (seconds)",
-                   min = 3,
-                   max = 30,
-                   value = 10,
-                   step = 1,
-                   round = TRUE
-                 ),
-                 
-                 sliderInput(
-                   inputId = "recording_offset",
-                   label = "Recording Offset",
-                   min = 0,
-                   max = 30,
-                   value = 0,
-                   step = 1,
-                   round = TRUE
-                 )
+           card(
+             card_header("Audio Segment Parameters"),
+             card_body(
+               sliderInput(
+                 inputId = "recording_length",
+                 label = "Recording Length (seconds)",
+                 min = 3,
+                 max = 30,
+                 value = 10,
+                 step = 1,
+                 round = TRUE
+               ),
+               
+               sliderInput(
+                 inputId = "recording_offset",
+                 label = "Recording Offset (seconds)",
+                 min = 0,
+                 max = 30,
+                 value = 3,
+                 step = 1,
+                 round = TRUE
                )
-             ),
-             
-             card(
-               card_header("Spectrogram Parameters"),
-               card_body(
-                 p("Insert Parameters Here")
-                 )
-               )
-             ),
-
+             )
+           ),
            
            uiOutput("audio_player"),
-           plotOutput("spectrogram")
-
-           ),
+           downloadButton("audioDownload", "Download Audio"),
+           plotOutput("spectrogram")),
+           
   
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -137,8 +152,19 @@ ui <- navbarPage(
                       plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px"))
              })
            )
+  ),
+  # Add your custom script for clearing Plotly selection
+  tags$script(HTML("
+  Shiny.addCustomMessageHandler('plotly-clearSelection', function(plotId) {
+    var plot = document.getElementById(plotId);
+    if (plot) {
+      Plotly.restyle(plot, {selectedpoints: [null]});
+    }
+  });
+"))
   )
-)
+
+
 
 
 server <- function(input, output, session) {
@@ -148,26 +174,6 @@ server <- function(input, output, session) {
   ###############################################
   # Reactive value to store the selected species code
   species_click <- reactiveVal("acafly") # Default species code
-  
-  # Function to create table:
-  create_table <- function(data) {
-    datatable(
-      data.frame(Display = data$Display),
-      escape = FALSE,
-      extensions = "Buttons",
-      options = list(
-        dom = 'Bfrtip',
-        ordering = FALSE,
-        page_length = nrow(data),
-        buttons = c('csv', 'copy'),
-        lengthMenu = list(c(nrow(data)), c("All")) # Allow selecting "All"
-      ),
-      rownames = FALSE,
-      colnames = NULL,
-      # selection = "single"
-      selection = list(mode = "single", target = "cell")
-    )
-  }
 
   create_table_pivot <- function(data) {
     datatable(
@@ -183,239 +189,183 @@ server <- function(input, output, session) {
         columnDefs = list(list(visible=FALSE, targets="Species.Code"))
       ),
       rownames = FALSE,
-      selection = list(mode = "single", target = "cell")
+      selection = list(mode = "single", target = "row")
     )
   }
   
-  create_pivot_month <- function(df, yr_input="All") {
-    if (yr_input == "All") {
-      out_df <- df %>%
-        mutate(Date = as.Date(Date), Month = month(Date)) %>%
-        group_by(Common.Name, Species.Code, Month) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(1:12)) %>%
-        rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
-      return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(lubridate::year(as.Date(Date)) == yr_input) %>%
-        mutate(Date = as.Date(Date), Month = month(Date)) %>%
-        group_by(Common.Name, Species.Code, Month) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(1:12)) %>%
-        rename_with( ~ month.name[as.numeric(.)], -c(Common.Name, Species.Code))
-      return(out_df)
+  create_pivot_month <- function(df, yr_input = "All") {
+    df <- df %>%
+      filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
+      mutate(Month = factor(month.abb[lubridate::month(as.Date(Date))], levels = month.abb)) %>%
+      group_by(Common.Name, Species.Code, Month) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") %>%
+      pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
+    # Reorder the columns: Common.Name, Species.Code, then months in order
+    month_order <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    
+    # Add missing month columns with 0 values if they don't exist
+    for (month in month_order) {
+      if (!(month %in% names(df))) {
+        df[[month]] <- 0  # Add missing months with 0 values
+      }
     }
+    
+    df <- df %>% select(Common.Name, Species.Code, Total.Count, all_of(month_order))
+    return(df)
   }
 
   create_pivot_year <- function(df, loc_input = "All") {
-    if (loc_input == "All") {
-      out_df <- df %>%
-        mutate(Date = as.Date(Date), Year = year(Date))
-
-       yrs <- unique(out_df$Year)
-
-       out_df <- out_df %>%
-        group_by(Common.Name, Species.Code, Year) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(yrs))
-
-       return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(Location == loc_input) %>%
-        mutate(Date = as.Date(Date), Year = year(Date))
-
-      yrs <- unique(out_df$Year)
-
-      out_df <- out_df %>%
-        group_by(Common.Name, Species.Code, Year) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, as.character(yrs))
-
-      return(out_df)
-    }
+    df <- df %>%
+      filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
+      mutate(Date = as.Date(Date), Year = year(Date)) %>%
+      group_by(Common.Name, Species.Code, Year) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") %>%
+      pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
+      select(Common.Name, Total.Count, everything())
+    return(df)
   }
 
   create_pivot_location <- function(df, yr_input = "All") {
-
-    if (yr_input == "All") {
-      locs <- unique(df$Location)
-
-      out_df <- df %>%
-        group_by(Common.Name, Species.Code, Location) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, locs)
-
-      return(out_df)
-    } else {
-      out_df <- df %>%
-        filter(lubridate::year(as.Date(Date)) == yr_input)
-
-      locs <- unique(out_df$Location)
-
-      out_df <- out_df %>%
-        group_by(Common.Name, Species.Code, Location) %>%
-        summarize(Count_by_Species = n()) %>%
-        pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-        select(Common.Name, Species.Code, locs)
-
-      return(out_df)
-    }
+    df <- df %>%
+      filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
+      group_by(Common.Name, Species.Code, Location) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") %>%
+      pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
+      select(Common.Name, Total.Count, everything())
+    return(df)
   }
   
   confidence_filter <- function(data, conf) {
     min_conf <- conf[1]
     max_conf <- conf[2]
-    
-    data <- subset(data,
-                   as.numeric(Confidence) >= min_conf &
-                     as.numeric(Confidence) <= max_conf)
-    
+    data <- subset(data, as.numeric(Confidence) >= min_conf & as.numeric(Confidence) <= max_conf)
     return(data)
   }
   
-  # Reactive expression for species_by_month based on year selection
-  total_species <- reactive({
+  year_values <- unique(as.character(lubridate::year(all_data$Date)))
+  year_values <- as.list(year_values[order(year_values)])
+  names(year_values) <- as.list(year_values)
+  year_values <- c(year_values, "All" = "All")
+  
+  loc_values <- unique(all_data$Location)
+  loc_values <- as.list(loc_values[order(loc_values)])
+  names(loc_values) <- as.list(loc_values)
+  loc_values <- c(loc_values, "All" = "All")
+  
+  # Confidence default
+  default_confidence <- c(0.7, 1)
+  
+  # Reactive filtered data
+  filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
+  
+  observe({
+    req(all_data)
     req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    
-    # New df of total count by species:
-    count_by_species <- all_data %>% count(Common.Name, Species.Code, name = "Count")
+    new_data <- confidence_filter(all_data, input$confidence_selection_overview)
+    filtered_data(new_data)
   })
   
+  # Reactives that generate pivots on demand
   species_by_month <- reactive({
-    req(input$year_sel)  # Ensure input exists before proceeding
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    create_pivot_month(all_data, input$year_sel)
-  })
-
+    req(input$year_sel)
+    req(filtered_data())
+    create_pivot_month(filtered_data(), input$year_sel)
+  }) %>% bindCache(input$year_sel, input$confidence_selection_overview)
+  
   species_by_location <- reactive({
-    req(input$year_sel) # Ensure input exists before proceeding
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    create_pivot_location(all_data, input$year_sel)
-  })
-
+    req(input$year_sel)
+    req(filtered_data())
+    create_pivot_location(filtered_data(), input$year_sel)
+  }) %>% bindCache(input$year_sel, input$confidence_selection_overview)
+  
   species_by_year <- reactive({
     req(input$loc_sel)
-    req(input$confidence_selection_overview)
-    all_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    create_pivot_year(all_data, input$loc_sel)
+    req(filtered_data())
+    create_pivot_year(filtered_data(), input$loc_sel)
+  }) %>% bindCache(input$loc_sel, input$confidence_selection_overview)
+  
+  # Table rendering
+  output$species_by_month_pivot <- renderDataTable({
+    create_table_pivot(species_by_month())
   })
-
-  # Observe Data Tables
-  observe({
-    output$species_by_month_pivot <- renderDataTable({ create_table_pivot(species_by_month()) })
+  
+  output$species_by_location_pivot <- renderDataTable({
+    create_table_pivot(species_by_location())
   })
-
-  observe({
-    output$species_by_location_pivot <- renderDataTable({ create_table_pivot(species_by_location()) })
-  })
-
-  observe({
-    output$species_by_year_pivot <- renderDataTable({ create_table_pivot(species_by_year())})
-  })
-
-  observe({
-    output$species_counts_t1 <- renderDataTable({ create_table_pivot(total_species()) })
+  
+  output$species_by_year_pivot <- renderDataTable({
+    create_table_pivot(species_by_year())
   })
 
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
-    if (input$sel_view == "totals") {
-
-      DT::dataTableOutput("species_counts_t1")
-
-    } else if (input$sel_view == "by_month") {
-
-      # Creating valid choices for year filtering
-      year_vals <- unique(as.character(lubridate::year(all_data$Date)))
-      year_vals <- as.list(year_vals[order(year_vals)])
-      names(year_vals) <- as.list(year_vals)
-      year_vals <- c(year_vals, "All"="All")
-
+    # Creating valid choices for year filtering
+    year_vals <- unique(as.character(lubridate::year(all_data$Date)))
+    year_vals <- as.list(year_vals[order(year_vals)])
+    names(year_vals) <- as.list(year_vals)
+    year_vals <- c(year_vals, "All"="All")
+    
+    # Create valid choices for year filtering
+    loc_vals <- unique(all_data$Location)
+    loc_vals <- as.list(loc_vals[order(loc_vals)])
+    names(loc_vals) <- as.list(loc_vals)
+    loc_vals <- c(loc_vals, "All" = "All")
+      
+    if (input$sel_view == "by_month") {
       tagList(
-        selectInput("year_sel",
-                    label = "Year Selection",
-                    choices = year_vals,
-                    selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_month_pivot")
       )
 
     } else if (input$sel_view =="by_location") {
-
-      # Creating valid choices for year filtering
-      year_vals <- unique(as.character(lubridate::year(all_data$Date)))
-      year_vals <- as.list(year_vals[order(year_vals)])
-      names(year_vals) <- as.list(year_vals)
-      year_vals <- c(year_vals, "All" = "All")
-
       tagList(
-        selectInput("year_sel",
-                    label = "Year Selection",
-                    choices = year_vals,
-                    selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_location_pivot")
       )
+      
     } else if (input$sel_view == "by_year") {
-
-      # Create valid choices for year filtering
-      loc_vals <- unique(all_data$Location)
-      loc_vals <- as.list(loc_vals[order(loc_vals)])
-      names(loc_vals) <- as.list(loc_vals)
-      loc_vals <- c(loc_vals, "All" = "All")
-
       tagList(
-        selectInput("loc_sel",
-                    label = "Location Selection",
-                    choices = loc_vals,
-                    selected = "All"),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"),
         DT::dataTableOutput("species_by_year_pivot")
       )
     }
-  })
-
+  }) 
+  
   # Observe clicks on the tables
-  observeEvent(input$species_by_month_pivot_cells_selected, {
-    selected_row <- input$species_by_month_pivot_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- species_by_month()$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+  observeEvent(input$species_by_month_pivot_rows_selected, {
+    selected_row <- input$species_by_month_pivot_rows_selected
+    if (!is.null(selected_row) && length(selected_row) > 0) {
+      species_list <- species_by_month()
+      if (selected_row[1] <= nrow(species_list)) {
+        species_click(species_list$Species.Code[selected_row[1]])  
+        updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+      }
     }
   })
-
-  observeEvent(input$species_by_location_pivot_cells_selected, {
-    selected_row <- input$species_by_location_pivot_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- species_by_location()$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+  
+  observeEvent(input$species_by_location_pivot_rows_selected, {
+    selected_row <- input$species_by_location_pivot_rows_selected
+    if (!is.null(selected_row) && length(selected_row) > 0) {
+      species_list <- species_by_location()
+      if (selected_row[1] <= nrow(species_list)) {
+        species_click(species_list$Species.Code[selected_row[1]])  
+        updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+      }
     }
   })
-
-  observeEvent(input$species_by_year_pivot_cells_selected, {
-    selected_row <- input$species_by_year_pivot_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- species_by_year()$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
-    }
-  })
-
-  observeEvent(input$species_counts_t1_cells_selected, {
-    selected_row <- input$species_counts_t1_cells_selected
-    if (nrow(selected_row) > 0) {
-      new_species <- total_species()$Species.Code[selected_row]
-      species_click(new_species) # Update the reactive value
-      updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+  
+  observeEvent(input$species_by_year_pivot_rows_selected, {
+    selected_row <- input$species_by_year_pivot_rows_selected
+    if (!is.null(selected_row) && length(selected_row) > 0) {
+      species_list <- species_by_year()
+      if (selected_row[1] <= nrow(species_list)) {
+        species_click(species_list$Species.Code[selected_row[1]])  
+        updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+      }
     }
   })
   
@@ -426,6 +376,46 @@ server <- function(input, output, session) {
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
     print(h3(name_title))
   })
+  
+  # Function for determining date range
+  get_week_date_range <- function(year, week) {
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
+    
+    # Calculate the start date of the target week
+    start_date <- first_sunday + (week - 1) * 7
+    
+    # Calculate the end date of the target week
+    end_date <- start_date + 6
+    
+    # Format the date range
+    paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
+  }
+  
+  get_week_from_date <- function(date) {
+    date <- as.Date(date, format = "%Y-%m-%d")
+    
+    # Extract year from the given date
+    year <- as.integer(format(date, "%Y"))
+    
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
+    
+    # Calculate the difference in days between the given date and the first Sunday
+    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
+    
+    # Determine week number
+    week_number <- (days_since_first_sunday %/% 7) +1
+    
+    return(week_number)
+    
+  }
   
   # List of locations
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
@@ -491,47 +481,9 @@ server <- function(input, output, session) {
   ## Application Build: Species-Specific Location Drilldown ##
   ############################################################
   
-  # Function for determining date range
-  get_week_date_range <- function(year, week) {
-    # Get the first day of the year
-    first_day <- as.Date(paste0(year, "-01-01"))
-    
-    # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
-    
-    # Calculate the start date of the target week
-    start_date <- first_sunday + (week - 1) * 7
-    
-    # Calculate the end date of the target week
-    end_date <- start_date + 6
-    
-    # Format the date range
-    paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
-  }
-  
-  get_week_from_date <- function(date) {
-    # Extract year from the given date
-    year <- as.integer(format(as.Date(date), "%Y"))
-    
-    # Get the first day of the year
-    first_day <- as.Date(paste0(year, "-01-01"))
-    
-    # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
-    
-    # Calculate the difference in days between the given date and the first Sunday
-    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
-    
-    # Determine week number
-    week_number <- (days_since_first_sunday %/% 7) +1
-    
-    return(week_number)
-    
-  }
-
   output$species_title <- renderUI({
     name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
-    print(h3(name_title))
+    h3(name_title)
   })
   
   output$species_link <- renderUI({
@@ -540,7 +492,7 @@ server <- function(input, output, session) {
       href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
                     species_click(), "&mediaType=audio&sort=rating_rank_desc"),
       target = "_blank",
-      "Open Bird Guide"
+      h5("[Open Bird Guide]")
     )
   })
   
@@ -554,6 +506,11 @@ server <- function(input, output, session) {
         
         # Subset by species:
         species_data <- subset(all_data, Species.Code==species_click() & Location == loc)
+        
+        # Check if species_data has any rows
+        validate(
+          need(nrow(species_data) > 0, "No observations available for this species at this location.")
+        )
         
         # Extract Week, Year, and create Week.Year.Loc variable
         species_data <- species_data %>%
@@ -603,7 +560,7 @@ server <- function(input, output, session) {
                                          )) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
             scale_x_continuous(breaks = c(1, 5, 9, 13, 17, 21, 26, 30, 35, 39, 44, 48), 
-                               limits = c(1, 52),
+                               limits = c(0, 54),
                                labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +
             labs(title = loc, x = "Month (Approximate)", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
@@ -623,7 +580,7 @@ server <- function(input, output, session) {
                                            "<br>Count:", Count
                                          ))) +
             geom_bar(position = "identity", alpha = 0.8, aes(fill = as.factor(Year)), width = 0.9) +
-            scale_x_continuous(breaks = 1:12, limits = c(1, 12)) +
+            scale_x_continuous(breaks = 1:12, limits = c(0, 13)) +
             labs(title = loc, x = "Month", y = "Frequency") +
             scale_fill_manual(name = "Year", values = cols) +
             theme_minimal()
@@ -647,11 +604,26 @@ server <- function(input, output, session) {
   # Create reactive values to store audio and spectrogram
   audio_player <- reactiveVal(NULL)
   spectrogram <- reactiveVal(NULL)
+  audio_file_path <- reactiveVal(NULL)
 
   observeEvent(input$tab_selection, {
     selected_data(NULL)
     audio_player(NULL)
     spectrogram(NULL)
+    audio_player(NULL)
+    output$audio_player <- NULL
+    
+    if (!is.null(audio_file_path())) {
+      if (file.exists(audio_file_path())) {
+        file.remove(audio_file_path())
+      }
+    }
+    audio_file_path(NULL)
+    
+    # Clear the plotly selection
+    for (i in seq_along(location_list)) {
+      session$sendCustomMessage("plotly-clearSelection", paste0("frequencyPlot_", i))
+    }
   })
 
   
@@ -669,21 +641,30 @@ server <- function(input, output, session) {
     selected_data(event_data("plotly_selected"))
     
     find_audio_file <- function(row) {
-      
-      file_name <- basename(row[["Begin.Path"]])
-      start_time <- as.numeric(row[["Begin.Time..s."]])
-      
-      # TEMPORARY LOCAL DIRECTORY FOR TESTING
-      file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
-      
-      audio_loc <- file.path(file_loc, file_name)
-      
-      if (!file.exists(audio_loc)) {
+      if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
         return(NULL)
       }
       
-      return(paste0(file_name, "***", start_time))
+      file_name <- basename(row[["Begin.Path"]])
+      year <- year(row[["Date"]])
+      file_loc <- paste0(audio_filepath, "Bio ", as.character(year), "/From Recorders")
+      
+      if (is.null(row[["Begin.Time..s."]])) {
+        return(NULL)
+      }
+      
+      start_time <- as.numeric(row[["Begin.Time..s."]])
+      
+      
+      audio_loc <- file.path(file_loc, file_name)
+      
+      if (is.null(audio_loc) || audio_loc == "" || !file.exists(audio_loc)) {
+        return(NULL)
+      }
+      
+      return(paste0(audio_loc, "***", start_time))
     }
+    
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
@@ -762,45 +743,54 @@ server <- function(input, output, session) {
       }
     })
   })
-
+  
+  selected_audio <- reactiveValues(file = NULL, begin_time = NULL)
   
   observeEvent(input$play_button, {
-    # TEMPORARY LOCAL DIRECTORY FOR TESTING
-    file_loc <- "/Users/laurenwick/Dropbox/Lauren Wick/Test audio"
+    selectedRow <- input$play_button
+    audio_file_path_raw <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
+    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
     
-    # Grab value from slider for length of recording to extract
+    selected_audio$file <- audio_file_path_raw
+    selected_audio$begin_time <- begin_time
+    
+    update_audio_and_spectrogram()
+  })
+  
+  observeEvent(c(input$recording_length, input$recording_offset), {
+    if (!is.null(selected_audio$file)) {
+      update_audio_and_spectrogram()
+    }
+  })
+  
+  update_audio_and_spectrogram <- reactive({
+    req(selected_audio$file)
+    
     recording_secs <- input$recording_length
-    
     recording_offset <- input$recording_offset
     
-    # Define the temporary directory and stream the data
     if (!dir.exists("www")) {
       dir.create("www")
     }
     
-    # Take the value of input$select_button
-    selectedRow <- input$play_button
-    audio_file <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
-    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
-    
-    audio_src <- paste0(sub("\\.wav$", "", audio_file), "_", begin_time, "s.wav")
+    audio_src <- paste0(sub("\\.wav$", "", basename(selected_audio$file)), "_", selected_audio$begin_time, "s.wav")
     dest_path <- file.path("www", audio_src)
     
-    later::later(function() {
-      if (file.exists(dest_path)) file.remove(dest_path)
-    }, delay = 10)
-    
-    audio_loc <- file.path(file_loc, audio_file)
-    output_wav <- av_audio_convert(audio = audio_loc, 
+    output_wav <- av_audio_convert(audio = selected_audio$file, 
                                    output = dest_path,
-                                   start_time = begin_time - as.numeric(recording_offset),
+                                   start_time = selected_audio$begin_time - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
     
-    audio_player(tags$audio(src = audio_src, type = "audio/wav", controls = NA, autoplay = NA))
+    audio_file_path(dest_path)
+    
+    # Force UI refresh by generating a new audio tag
+    output$audio_player <- renderUI({
+      tags$audio(src = audio_src, type = "audio/wav", controls = TRUE, autoplay = TRUE)
+    })
     
     audio_wav <- tuneR::readWave(output_wav)
     
-    v <- ggspectro(audio_wav, ovlp = 50) +
+    v <- seewave::ggspectro(audio_wav, ovlp = 50) +
       geom_tile(aes(fill = amplitude)) +
       ylim(0, 12) +
       scale_fill_gradientn(colours = viridis(256, option = "B"),
@@ -808,6 +798,18 @@ server <- function(input, output, session) {
     
     spectrogram(v)
   })
+  
+  output$audioDownload <- downloadHandler(
+    filename = function() {
+      req(audio_file_path())
+      paste(basename(audio_file_path()))
+    },
+    content = function(file) {
+      req(audio_file_path())
+      file.copy(audio_file_path(), file)
+    },
+    contentType = "audio/wav"
+  )
   
   # Show the name of the employee that has been clicked on
   output$audio_player <- renderUI({
