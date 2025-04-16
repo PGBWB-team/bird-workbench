@@ -31,10 +31,7 @@ ui <- navbarPage(
   tabPanel(title = "Prairie Haven Overview",
            value = "ph_overview",
            
-           fixedPanel(
-             top = 70, left = 30, width = "700px", height = "250px",
-             style = "z-index: 1000",
-             draggable = TRUE,
+      
              layout_column_wrap(
                width = 1/2,
                card(
@@ -51,7 +48,7 @@ ui <- navbarPage(
                        step = 0.01
                      ),
                      tags$div(
-                       style = "display: flex; justify-content: space-between; padding: 0 12px; margin-top: -10px; font-size: 11px;",
+                       style = "width: 55%; margin-left: 1%; display: flex; justify-content: space-between; font-size: 11px; margin-top: -10px;",
                        tags$span("Not Happy"),
                        tags$span("Okay"),
                        tags$span("Happy")
@@ -68,23 +65,7 @@ ui <- navbarPage(
                                             "Species by Year" = "by_year"),
                              selected = "by_month")
                )
-             )
-           ),
-           
-           # sliderInput(
-           #   inputId = "confidence_selection_overview", 
-           #   label = "Confidence Level", 
-           #   min = 0, 
-           #   max = 1, 
-           #   value = c(0.7, 1)
-           # ),
-           # 
-           # selectInput(inputId = "sel_view", 
-           #             label = h3("View Selection"),
-           #             choices = list("Species by Month" = "by_month",
-           #                            "Species by Location" = "by_location", 
-           #                            "Species by Year" = "by_year"),
-           #             selected = "by_month"),
+             ),
            
           uiOutput("overview_view")),
   
@@ -363,46 +344,19 @@ server <- function(input, output, session) {
       
     if (input$sel_view == "by_month") {
       tagList(
-        layout_columns(
-          card(
-            height = "285px",
-            card_body(
-              selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"))
-          ),
-          col_widths = c(-8, 4)
-        ),
-        br(),
-        # selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_month_pivot")
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
-        layout_columns(
-          card(
-            height = "285px",
-            card_body(
-              selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"))
-          ),
-          col_widths = c(-8, 4)
-        ),
-        br(),
-        # selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
         DT::dataTableOutput("species_by_location_pivot")
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
-        layout_columns(
-          card(
-            height = "285px",
-            card_body(
-              selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"))
-          ),
-          col_widths = c(-8, 4)
-        ),
-        br(),
-        # selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"),
         DT::dataTableOutput("species_by_year_pivot")
       )
     }
