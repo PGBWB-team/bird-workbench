@@ -248,22 +248,14 @@ server <- function(input, output, session) {
   # Confidence default
   default_confidence <- c(0.7, 1)
   
-  # # Reactive filtered data
-  # filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
-  # 
-  # observe({
-  #   req(all_data)
-  #   req(input$confidence_selection_overview)
-  #   new_data <- confidence_filter(all_data, input$confidence_selection_overview)
-  #   filtered_data(new_data)
-  #   print(head(filtered_data()))
-  # })
-  
-  # filtered_data becomes a reactive expression instead of reactiveVal
-  filtered_data <- reactive({
+  # Reactive filtered data
+  filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
+
+  observe({
     req(all_data)
     req(input$confidence_selection_overview)
-    confidence_filter(all_data, input$confidence_selection_overview)
+    new_data <- confidence_filter(all_data, input$confidence_selection_overview)
+    filtered_data(new_data)
   })
   
   
