@@ -17,6 +17,7 @@ library(RColorBrewer)
 library(shinyjs)
 library(glue)
 library(hms)
+library(profvis)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
@@ -127,10 +128,6 @@ ui <- navbarPage(
            downloadButton("audioDownload", "Download Audio"),
            plotOutput("spectrogram")),
            
-  tabPanel(title = "Audio File Overview",
-           value = "audio_file_overview",
-           uiOutput("audio_file_pivot_view")
-  ),
            
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
@@ -142,6 +139,13 @@ ui <- navbarPage(
              })
            )
   ),
+  
+  tabPanel(title = tags$span(class = "nav-tab-right", "Mike's Page"),
+           value = "audio_file_overview",
+           div(class = "red-warning-box", textOutput("warning_message_files")),
+           uiOutput("audio_file_pivot_view")
+  ),
+  
   # Add your custom script for clearing Plotly selection
   tags$script(HTML("
   Shiny.addCustomMessageHandler('plotly-clearSelection', function(plotId) {
@@ -150,7 +154,47 @@ ui <- navbarPage(
       Plotly.restyle(plot, {selectedpoints: [null]});
     }
   });
-"))
+")),
+  
+  tags$head(
+    tags$style(HTML("
+    .navbar-nav {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .nav-tab-right {
+      margin-left: auto !important;
+      background-color: #f8d7da !important; /* light red background */
+      color: #721c24 !important;           /* dark red text */
+      font-weight: bold;
+      border-radius: 5px;
+      padding: 6px 12px;
+    }
+
+    .nav-tab-right:hover {
+      background-color: #f5c6cb !important; /* slight hover change */
+      color: #721c24 !important;
+    }
+
+    .navbar-nav > li:last-child {
+      order: 2;
+    }
+    
+    .red-warning-box {
+      background-color: #f8d7da;
+      color: #721c24;
+      font-weight: bold;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 20px auto;
+      display: table;
+    }
+  "))
+  )
+  
+  
   )
 
 
@@ -233,17 +277,7 @@ server <- function(input, output, session) {
     max_conf <- conf[2]
     data <- subset(data, as.numeric(Confidence) >= min_conf & as.numeric(Confidence) <= max_conf)
     return(data)
-  }
-  
-  year_values <- unique(as.character(lubridate::year(all_data$Date)))
-  year_values <- as.list(year_values[order(year_values)])
-  names(year_values) <- as.list(year_values)
-  year_values <- c(year_values, "All" = "All")
-  
-  loc_values <- unique(all_data$Location)
-  loc_values <- as.list(loc_values[order(loc_values)])
-  names(loc_values) <- as.list(loc_values)
-  loc_values <- c(loc_values, "All" = "All")
+  } 
   
   # Confidence default
   default_confidence <- c(0.7, 1)
@@ -290,36 +324,39 @@ server <- function(input, output, session) {
   output$species_by_year_pivot <- renderDataTable({
     create_table_pivot(species_by_year())
   })
+  
+
+  year_choices <- reactive({
+    years <- unique(as.character(lubridate::year(all_data$Date)))
+    years <- years[order(years)]
+    c(setNames(as.list(years), years), "All" = "All")
+  }) %>% bindCache(all_data)
+  
+  loc_choices <- reactive({
+    locs <- unique(all_data$Location)
+    locs <- locs[order(locs)]
+    c(setNames(as.list(locs), locs), "All" = "All")
+  }) %>% bindCache(all_data)
 
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
-    # Creating valid choices for year filtering
-    year_vals <- unique(as.character(lubridate::year(all_data$Date)))
-    year_vals <- as.list(year_vals[order(year_vals)])
-    names(year_vals) <- as.list(year_vals)
-    year_vals <- c(year_vals, "All"="All")
+    req(input$sel_view)
     
-    # Create valid choices for year filtering
-    loc_vals <- unique(all_data$Location)
-    loc_vals <- as.list(loc_vals[order(loc_vals)])
-    names(loc_vals) <- as.list(loc_vals)
-    loc_vals <- c(loc_vals, "All" = "All")
-      
     if (input$sel_view == "by_month") {
       tagList(
-        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
         DT::dataTableOutput("species_by_month_pivot")
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
-        selectInput("year_sel", label = "Year Selection", choices = year_vals, selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
         DT::dataTableOutput("species_by_location_pivot")
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
-        selectInput("loc_sel", label = "Location Selection", choices = loc_vals, selected = "All"),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
         DT::dataTableOutput("species_by_year_pivot")
       )
     }
@@ -363,6 +400,7 @@ server <- function(input, output, session) {
   ## Application Build: Audio File Overview ##
   ############################################
   
+  output$warning_message_files <- renderText("If you're not Mike, this page will not interest you :-)")
   species_values <- unique(all_data$Common.Name)
   default_species_vals <- c("American Crow", "American Goldfinch", "American Woodcock",
                             "Blue Jay", "Hairy Woodpecker", "Red-bellied Woodpecker", 
