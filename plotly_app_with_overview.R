@@ -15,9 +15,14 @@ library(av)
 library(viridisLite)
 library(RColorBrewer)
 library(shinyjs)
+library(glue)
+library(hms)
 
 # Reading in all data:
-all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
+# Second line defines specific columns we want to read, remove unwanted columns to improve loading time
+all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst",
+                          columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
+                                      "Begin.Path", "Location", "Date", "Date.Time"))
 
 # Set root folder for audio files
 audio_filepath <- "/Users/laurenwick/Dropbox/Lauren Wick/"
@@ -27,64 +32,45 @@ ui <- navbarPage(
   id = "main_nav",
   title = "BirdNet-Analyzer Data Visualization",
   selected = "ph_overview",
-  tabPanel(title = "Prairie Haven Overview",
-           value = "ph_overview",
-           
-      
-             layout_column_wrap(
-               width = 1/2,
-               card(
-                 height = "225px",
-                 card_body(
-                   tags$div(
-                     style = "position: relative;",
-                     sliderInput(
-                       inputId = "confidence_selection_overview", 
-                       label = "BirdNET Happiness Scale",
-                       min = 0, 
-                       max = 1, 
-                       value = c(0.7, 1),
-                       step = 0.01
-                     ),
-                     tags$div(
-                       style = "width: 55%; margin-left: 1%; display: flex; justify-content: space-between; font-size: 11px; margin-top: -10px;",
-                       tags$span("Not Happy"),
-                       tags$span("Okay"),
-                       tags$span("Happy")
-                     )
-                   )
-                 )
-               )
-               ,
-               card(
-                 selectInput(inputId = "sel_view", 
-                             label = "Pivot Table Selection",
-                             choices = list("Species by Month" = "by_month",
-                                            "Species by Location" = "by_location", 
-                                            "Species by Year" = "by_year"),
-                             selected = "by_month")
-               )
-             ),
-           
-          uiOutput("overview_view")),
+  
+  # Shared sliderInput for confidence
+    card(
+      height = "185px",
+      card_body(
+        tags$div(
+          style = "position: relative; width: 86%; margin: 0 auto;",  # align block
+          sliderInput(
+            inputId = "confidence_selection_overview", 
+            label = "BirdNET Happiness Scale",
+            min = 0, 
+            max = 1, 
+            value = c(0.7, 1),
+            step = 0.01,
+            width = "100%"
+          ),
+          tags$div(
+            style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
+            tags$span("Not Happy"),
+            tags$span("Okay"),
+            tags$span("Happy")
+          )
+        )
+      )
+  ),
+  
+  tabPanel(title = "Prairie Haven Overview", value = "ph_overview", 
+           selectInput(inputId = "sel_view", 
+                       label = "Pivot Table Selection",
+                       choices = list("Species by Month" = "by_month",
+                                      "Species by Location" = "by_location", 
+                                      "Species by Year" = "by_year"),
+                       selected = "by_month"),
+           uiOutput("overview_view")
+  ),
   
   tabPanel(title = "Species-Specific Location Drilldown", 
            value = "species_loc_drilldown",
-           
-           layout_column_wrap(
-             width = 1/2,
-             card(
-               card_body(
-                 sliderInput(
-                   inputId = "confidence_selection", 
-                   label = "Confidence Level",
-                   min = 0, 
-                   max = 1, 
-                   value = c(0.7, 1)
-                 )
-               )
-               
-             ),
+    
              card(
                radioButtons(
                  inputId = "time_interval",
@@ -92,8 +78,7 @@ ui <- navbarPage(
                  choices = c("Week" = "weekly", "Month" = "monthly"), 
                  selected = "weekly"
                )
-             )
-           ),
+             ),
              
            uiOutput("species_title"),
            uiOutput("species_link"),
@@ -142,7 +127,11 @@ ui <- navbarPage(
            downloadButton("audioDownload", "Download Audio"),
            plotOutput("spectrogram")),
            
-  
+  tabPanel(title = "Audio File Overview",
+           value = "audio_file_overview",
+           uiOutput("audio_file_pivot_view")
+  ),
+           
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
            uiOutput("species_title_overview"),
@@ -261,13 +250,14 @@ server <- function(input, output, session) {
   
   # Reactive filtered data
   filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
-  
+
   observe({
     req(all_data)
     req(input$confidence_selection_overview)
     new_data <- confidence_filter(all_data, input$confidence_selection_overview)
     filtered_data(new_data)
   })
+  
   
   # Reactives that generate pivots on demand
   species_by_month <- reactive({
@@ -369,11 +359,127 @@ server <- function(input, output, session) {
     }
   })
   
+  ############################################  
+  ## Application Build: Audio File Overview ##
+  ############################################
+  
+  species_values <- unique(all_data$Common.Name)
+  default_species_vals <- c("American Crow", "American Goldfinch", "American Woodcock",
+                            "Blue Jay", "Hairy Woodpecker", "Red-bellied Woodpecker", 
+                            "White-breasted Nuthatch")
+  
+  # Debounced species to exclude value
+  debounced_species_exclude <- debounce(reactive(input$species_exclude), 500)
+  
+  # Filtered data based on exclusion list
+  cached_filtered_data <- reactiveVal(NULL)
+  
+  observeEvent({
+    filtered_data()
+    debounced_species_exclude()
+  }, {
+    req(filtered_data(), debounced_species_exclude())
+    filtered <- filtered_data()[!(filtered_data()$Common.Name %in% debounced_species_exclude()),]
+    cached_filtered_data(filtered)
+  })
+  
+  # -- Optimized pivot creator --
+  create_pivot_files <- function(df) {
+    # # Step 1: Compute total counts per species per Begin.Path
+    # all_counts <- df %>%
+    #   group_by(Begin.Path, Common.Name) %>%
+    #   summarise(Count = n(), .groups = "drop")
+    # 
+    # # Step 2: Select top 3 species per Begin.Path
+    # df_top_birds <- all_counts %>%
+    #   group_by(Begin.Path) %>%
+    #   arrange(desc(Count)) %>%
+    #   slice_head(n = 3) %>%
+    #   mutate(
+    #     Rank = row_number(),
+    #     Label = glue("{Common.Name} ({Count})")
+    #   ) %>%
+    #   select(Begin.Path, Rank, Label) %>%
+    #   pivot_wider(
+    #     names_from = Rank,
+    #     values_from = Label,
+    #     names_prefix = "Top"
+    #   )
+    
+    # Step 3: Add overall metrics
+    df_all_cols <- df %>%
+      group_by(Begin.Path, Location, Date, Date.Time) %>%
+      summarise(
+        Number.Observations = n(),
+        Number.Unique.Species = n_distinct(Common.Name),
+        Mean.Confidence = format(round(mean(as.numeric(Confidence)), 4), nsmall = 4 ),
+        Median.Confidence = format(round(median(as.numeric(Confidence)), 4), nsmall = 4),
+        SD.Confidence = format(round(sd(as.numeric(Confidence)), 4), nsmall = 4),
+        .groups = "drop"
+      ) %>%
+      mutate(Time = as_hms(Date.Time)) %>%
+      mutate(Time.Of.Day = case_when(
+        Time < hms(0, 30, 11) ~ "Morning",
+        Time == hms(0, 30, 11) ~ "Afternoon",
+        Time > hms(0, 30, 11) ~ "Night"
+      )) %>%
+      mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
+      mutate(Year = as.character(year(Date))) %>%
+      mutate(Month = as.character(month(Date, label = TRUE, abbr = FALSE))) %>%
+      select(Begin.Path, Number.Observations, Number.Unique.Species, 
+             Location, Date, Year, Month, Time, Time.Of.Day, 
+             Mean.Confidence, Median.Confidence, SD.Confidence )
+      # left_join(df_top_birds, by = "Begin.Path")
+    
+    return(df_all_cols)
+  }
+  
+  # -- Final reactive for display data --
+  file_list <- reactive({
+    req(cached_filtered_data())
+    create_pivot_files(cached_filtered_data())
+  })
+  
+  # -- Render the pivot table --
+  output$file_list_pivot <- renderDataTable({
+    datatable(file_list(),
+              escape = FALSE,
+              extensions = "Buttons",
+              filter = "top",
+              options = list(
+                dom = "Bfrtip",
+                ordering = TRUE,
+                buttons = c("csv", "copy"),
+                pageLength = 100
+              ),
+              rownames = FALSE,
+              colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
+                           "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
+                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", "SD Conf" = "SD.Confidence"))
+  })
+  
+  
+  # -- UI for species exclusion and table display --
+  output$audio_file_pivot_view <- renderUI({
+    tagList(
+      selectizeInput(inputId = "species_exclude",
+                     label = "Species to Exclude",
+                     choices = species_values,
+                     selected = default_species_vals,
+                     multiple = TRUE,
+                     width = "400px"),
+      DT::dataTableOutput("file_list_pivot")
+    )
+  })
+  
+  
+  
+  
   ##################################################
   ## Application Build: Species-Specific Overview ##
   ##################################################
   output$species_title_overview <- renderUI({
-    name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
+    name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
     print(h3(name_title))
   })
   
@@ -438,7 +544,7 @@ server <- function(input, output, session) {
       output[[paste0("overviewPlot_", i)]] <- renderPlotly({
         
         # Subset by species:
-        species_data <- subset(all_data, Species.Code==species_click() & Location == loc)
+        species_data <- subset(filtered_data(), Species.Code==species_click() & Location == loc)
         
         # Extract Week, Year, and create Week.Year.Loc variable
         species_data <- species_data %>%
@@ -482,7 +588,7 @@ server <- function(input, output, session) {
   ############################################################
   
   output$species_title <- renderUI({
-    name_title <- unique(subset(all_data, Species.Code==species_click())$Common.Name)
+    name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
     h3(name_title)
   })
   
@@ -501,11 +607,11 @@ server <- function(input, output, session) {
       loc <- location_list[i]
       output[[paste0("frequencyPlot_", i)]] <- renderPlotly({
         
-        min_conf <- input$confidence_selection[1]
-        max_conf <- input$confidence_selection[2]
+        min_conf <- input$confidence_selection_overview[1]
+        max_conf <- input$confidence_selection_overview[2]
         
         # Subset by species:
-        species_data <- subset(all_data, Species.Code==species_click() & Location == loc)
+        species_data <- subset(filtered_data(), Species.Code==species_click() & Location == loc)
         
         # Check if species_data has any rows
         validate(
@@ -669,11 +775,11 @@ server <- function(input, output, session) {
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
       
-      min_conf <- input$confidence_selection[1]
-      max_conf <- input$confidence_selection[2]
+      min_conf <- input$confidence_selection_overview[1]
+      max_conf <- input$confidence_selection_overview[2]
       
       # Subset by species:
-      species_data <- subset(all_data, Species.Code==species_click())
+      species_data <- subset(filtered_data(), Species.Code==species_click())
       
       # Extract Week, Year, and create Week.Year.Loc variable
       species_data <- species_data %>%
