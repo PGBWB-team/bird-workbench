@@ -17,7 +17,7 @@ library(RColorBrewer)
 library(shinyjs)
 library(glue)
 library(hms)
-library(profvis)
+library(shinycssloaders)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
@@ -53,7 +53,7 @@ ui <- navbarPage(
             style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
             tags$span("Prepare for adventure"),
             tags$span("Not bad"),
-            tags$span("Happy")
+            tags$span("Pretty good")
           )
         )
       )
@@ -66,7 +66,7 @@ ui <- navbarPage(
                                       "Species by Location" = "by_location", 
                                       "Species by Year" = "by_year"),
                        selected = "by_month"),
-           uiOutput("overview_view")
+           uiOutput("overview_view") %>% withSpinner()
   ),
   
   tabPanel(title = "Species-Specific Location Drilldown", 
@@ -345,19 +345,19 @@ server <- function(input, output, session) {
     if (input$sel_view == "by_month") {
       tagList(
         selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-        DT::dataTableOutput("species_by_month_pivot")
+        DT::dataTableOutput("species_by_month_pivot") %>% withSpinner()
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
         selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-        DT::dataTableOutput("species_by_location_pivot")
+        DT::dataTableOutput("species_by_location_pivot") %>% withSpinner()
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
         selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
-        DT::dataTableOutput("species_by_year_pivot")
+        DT::dataTableOutput("species_by_year_pivot") %>% withSpinner()
       )
     }
   }) 
@@ -400,7 +400,7 @@ server <- function(input, output, session) {
   ## Application Build: Audio File Overview ##
   ############################################
   
-  output$warning_message_files <- renderText("If you're not Mike, this page will not interest you :-)")
+  output$warning_message_files <- renderText("If you're not Mike, this page probably won't interest you :-)")
   species_values <- unique(all_data$Common.Name)
   default_species_vals <- c("American Crow", "American Goldfinch", "American Woodcock",
                             "Blue Jay", "Hairy Woodpecker", "Red-bellied Woodpecker", 
@@ -491,7 +491,7 @@ server <- function(input, output, session) {
               colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
                            "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
                            "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", "SD Conf" = "SD.Confidence"))
-  })
+  }) 
   
   
   # UI for species exclusion and table display 
@@ -503,7 +503,7 @@ server <- function(input, output, session) {
                      selected = default_species_vals,
                      multiple = TRUE,
                      width = "400px"),
-      DT::dataTableOutput("file_list_pivot")
+      DT::dataTableOutput("file_list_pivot") %>% withSpinner()
     )
   })
   
