@@ -19,7 +19,10 @@ library(glue)
 library(hms)
 
 # Reading in all data:
-all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst")
+# Second line defines specific columns we want to read, remove unwanted columns to improve loading time
+all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst",
+                          columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
+                                      "Begin.Path", "Location", "Date", "Date.Time"))
 
 # Set root folder for audio files
 audio_filepath <- "/Users/laurenwick/Dropbox/Lauren Wick/"
@@ -245,15 +248,24 @@ server <- function(input, output, session) {
   # Confidence default
   default_confidence <- c(0.7, 1)
   
-  # Reactive filtered data
-  filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
+  # # Reactive filtered data
+  # filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
+  # 
+  # observe({
+  #   req(all_data)
+  #   req(input$confidence_selection_overview)
+  #   new_data <- confidence_filter(all_data, input$confidence_selection_overview)
+  #   filtered_data(new_data)
+  #   print(head(filtered_data()))
+  # })
   
-  observe({
+  # filtered_data becomes a reactive expression instead of reactiveVal
+  filtered_data <- reactive({
     req(all_data)
     req(input$confidence_selection_overview)
-    new_data <- confidence_filter(all_data, input$confidence_selection_overview)
-    filtered_data(new_data)
+    confidence_filter(all_data, input$confidence_selection_overview)
   })
+  
   
   # Reactives that generate pivots on demand
   species_by_month <- reactive({
