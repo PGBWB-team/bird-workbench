@@ -51,8 +51,8 @@ ui <- navbarPage(
           ),
           tags$div(
             style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
-            tags$span("Not Happy"),
-            tags$span("Okay"),
+            tags$span("Prepare for adventure"),
+            tags$span("Not bad"),
             tags$span("Happy")
           )
         )
@@ -421,28 +421,23 @@ server <- function(input, output, session) {
     cached_filtered_data(filtered)
   })
   
-  # -- Optimized pivot creator --
+  # Optimized pivot creator
   create_pivot_files <- function(df) {
-    # # Step 1: Compute total counts per species per Begin.Path
-    # all_counts <- df %>%
-    #   group_by(Begin.Path, Common.Name) %>%
-    #   summarise(Count = n(), .groups = "drop")
-    # 
-    # # Step 2: Select top 3 species per Begin.Path
-    # df_top_birds <- all_counts %>%
-    #   group_by(Begin.Path) %>%
-    #   arrange(desc(Count)) %>%
-    #   slice_head(n = 3) %>%
-    #   mutate(
-    #     Rank = row_number(),
-    #     Label = glue("{Common.Name} ({Count})")
-    #   ) %>%
-    #   select(Begin.Path, Rank, Label) %>%
-    #   pivot_wider(
-    #     names_from = Rank,
-    #     values_from = Label,
-    #     names_prefix = "Top"
-    #   )
+    
+    # First, get the top 3 species per file group
+    top_species_df <- df %>%
+      group_by(Begin.Path, Common.Name) %>%
+      summarise(Species.Count = n(), .groups = "drop") %>%
+      arrange(Begin.Path, desc(Species.Count)) %>%
+      group_by(Begin.Path) %>%
+      slice_head(n = 3) %>%
+      mutate(Rank = paste0("Top.Species.", row_number())) %>%
+      select(Begin.Path, Rank, Common.Name) %>%
+      pivot_wider(
+        names_from = Rank,
+        values_from = Common.Name,
+        values_fill = NA
+      )
     
     # Step 3: Add overall metrics
     df_all_cols <- df %>%
@@ -464,21 +459,23 @@ server <- function(input, output, session) {
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
       mutate(Year = as.character(year(Date))) %>%
       mutate(Month = as.character(month(Date, label = TRUE, abbr = FALSE))) %>%
+      left_join(top_species_df, by = "Begin.Path") %>%
       select(Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Year, Month, Time, Time.Of.Day, 
-             Mean.Confidence, Median.Confidence, SD.Confidence )
+             Mean.Confidence, Median.Confidence, SD.Confidence,
+             Top.Species.1, Top.Species.2, Top.Species.3)
       # left_join(df_top_birds, by = "Begin.Path")
     
     return(df_all_cols)
   }
   
-  # -- Final reactive for display data --
+  # Final reactive for display data 
   file_list <- reactive({
     req(cached_filtered_data())
     create_pivot_files(cached_filtered_data())
   })
   
-  # -- Render the pivot table --
+  # Render the pivot table
   output$file_list_pivot <- renderDataTable({
     datatable(file_list(),
               escape = FALSE,
@@ -497,7 +494,7 @@ server <- function(input, output, session) {
   })
   
   
-  # -- UI for species exclusion and table display --
+  # UI for species exclusion and table display 
   output$audio_file_pivot_view <- renderUI({
     tagList(
       selectizeInput(inputId = "species_exclude",
