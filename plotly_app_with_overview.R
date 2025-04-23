@@ -408,9 +408,9 @@ server <- function(input, output, session) {
       summarise(
         Number.Observations = n(),
         Number.Unique.Species = n_distinct(Common.Name),
-        Mean.Confidence = mean(as.numeric(Confidence)),
-        Median.Confidence = median(as.numeric(Confidence)),
-        SD.Confidence = sd(as.numeric(Confidence)),
+        Mean.Confidence = format(round(mean(as.numeric(Confidence)), 4), nsmall = 4 ),
+        Median.Confidence = format(round(median(as.numeric(Confidence)), 4), nsmall = 4),
+        SD.Confidence = format(round(sd(as.numeric(Confidence)), 4), nsmall = 4),
         .groups = "drop"
       ) %>%
       mutate(Time = as_hms(Date.Time)) %>%
@@ -420,8 +420,11 @@ server <- function(input, output, session) {
         Time > hms(0, 30, 11) ~ "Night"
       )) %>%
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
+      mutate(Year = as.character(year(Date))) %>%
+      mutate(Month = as.character(month(Date, label = TRUE, abbr = FALSE))) %>%
       select(Begin.Path, Number.Observations, Number.Unique.Species, 
-             Location, Date, Time, Time.Of.Day, Mean.Confidence, Median.Confidence, SD.Confidence )
+             Location, Date, Year, Month, Time, Time.Of.Day, 
+             Mean.Confidence, Median.Confidence, SD.Confidence )
       # left_join(df_top_birds, by = "Begin.Path")
     
     return(df_all_cols)
@@ -445,7 +448,10 @@ server <- function(input, output, session) {
                 buttons = c("csv", "copy"),
                 pageLength = 100
               ),
-              rownames = FALSE)
+              rownames = FALSE,
+              colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
+                           "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
+                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", "SD Conf" = "SD.Confidence"))
   })
   
   
