@@ -818,6 +818,18 @@ server <- function(input, output, session) {
         # Convert to an interactive plotly object and register the click event
         plotly_object <- ggplotly(p, tooltip = "text")
         event_register(plotly_object, "plotly_click")
+        
+        # Identify the three most recent years
+        recent_years <- tail(sort(unlist(year_choices())), 4)
+        
+        # Update visibility of traces
+        plotly_object$x$data <- lapply(plotly_object$x$data, function(trace) {
+          if (!is.null(trace$name) && !(trace$name %in% as.character(recent_years))) {
+            trace$visible <- "legendonly"
+          }
+          return(trace)
+        })
+        
         plotly_object %>%
           layout(clickmode = "event+select")  
         
