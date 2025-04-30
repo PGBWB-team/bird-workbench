@@ -475,7 +475,7 @@ server <- function(input, output, session) {
         Number.Unique.Species = n_distinct(Common.Name),
         Mean.Confidence = as.numeric(format(round(mean(as.numeric(Confidence)), 4), nsmall = 4 )),
         Median.Confidence = as.numeric(format(round(median(as.numeric(Confidence)), 4), nsmall = 4)),
-        SD.Confidence = as.numeric(format(round(sd(as.numeric(Confidence)), 4), nsmall = 4)),
+        SD.Confidence = if (n()>1) as.numeric(format(round(sd(as.numeric(Confidence)), 4), nsmall = 4)) else 0,
         .groups = "drop"
       ) %>%
       mutate(Time = as_hms(Date.Time)) %>%
