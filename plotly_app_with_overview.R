@@ -143,6 +143,7 @@ ui <- navbarPage(
   tabPanel(title = tags$span(class = "nav-tab-right", "Mike's Page"),
            value = "audio_file_overview",
            div(class = "red-warning-box", textOutput("warning_message_files")),
+           uiOutput("audio_player_full"),
            uiOutput("audio_file_pivot_view")
   ),
   
@@ -233,7 +234,10 @@ server <- function(input, output, session) {
       group_by(Common.Name, Species.Code, Month) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE))
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
+      bind_rows(summarise(.,
+                          across(where(is.numeric), sum),
+                          across(where(is.character), ~"Total")))
     # Reorder the columns: Common.Name, Species.Code, then months in order
     month_order <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -257,7 +261,10 @@ server <- function(input, output, session) {
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, Total.Count, everything())
+      select(Common.Name, Total.Count, everything()) %>%
+      bind_rows(summarise(.,
+                          across(where(is.numeric), sum),
+                          across(where(is.character), ~"Total")))
     return(df)
   }
 
@@ -268,7 +275,10 @@ server <- function(input, output, session) {
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, Total.Count, everything())
+      select(Common.Name, Total.Count, everything()) %>%
+      bind_rows(summarise(.,
+                          across(where(is.numeric), sum),
+                          across(where(is.character), ~"Total")))
     return(df)
   }
   
@@ -439,15 +449,33 @@ server <- function(input, output, session) {
         values_fill = NA
       )
     
+    find_audio_file_full <- function(row) {
+      if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
+        return(NULL)
+      }
+      
+      file_name <- basename(row[["Begin.Path"]])
+      year <- year(row[["Date"]])
+      file_loc <- paste0(audio_filepath, "Bio ", as.character(year), "/From Recorders")
+      
+      audio_loc <- file.path(file_loc, file_name)
+      
+      if (is.null(audio_loc) || audio_loc == "" || !file.exists(audio_loc)) {
+        return(NULL)
+      }
+      
+      return(audio_loc)
+    }
+    
     # Step 3: Add overall metrics
     df_all_cols <- df %>%
       group_by(Begin.Path, Location, Date, Date.Time) %>%
       summarise(
         Number.Observations = n(),
         Number.Unique.Species = n_distinct(Common.Name),
-        Mean.Confidence = format(round(mean(as.numeric(Confidence)), 4), nsmall = 4 ),
-        Median.Confidence = format(round(median(as.numeric(Confidence)), 4), nsmall = 4),
-        SD.Confidence = format(round(sd(as.numeric(Confidence)), 4), nsmall = 4),
+        Mean.Confidence = as.numeric(format(round(mean(as.numeric(Confidence)), 4), nsmall = 4 )),
+        Median.Confidence = as.numeric(format(round(median(as.numeric(Confidence)), 4), nsmall = 4)),
+        SD.Confidence = as.numeric(format(round(sd(as.numeric(Confidence)), 4), nsmall = 4)),
         .groups = "drop"
       ) %>%
       mutate(Time = as_hms(Date.Time)) %>%
@@ -460,7 +488,21 @@ server <- function(input, output, session) {
       mutate(Year = as.character(year(Date))) %>%
       mutate(Month = as.character(month(Date, label = TRUE, abbr = FALSE))) %>%
       left_join(top_species_df, by = "Begin.Path") %>%
-      select(Begin.Path, Number.Observations, Number.Unique.Species, 
+      rowwise() %>%
+      mutate(Play.Audio = {
+        audio_id <- find_audio_file_full(pick(everything()))
+        if (!is.null(audio_id)) {
+          as.character(shinyInput(
+            FUN = actionButton,
+            id = audio_id,
+            label = "Audio",
+            onclick = 'Shiny.setInputValue(\"stream_audio\", this.id, {priority: \"event\"})'
+          ))
+        } else {
+          "No Audio File"
+        }
+      }) %>%
+      select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Year, Month, Time, Time.Of.Day, 
              Mean.Confidence, Median.Confidence, SD.Confidence,
              Top.Species.1, Top.Species.2, Top.Species.3)
@@ -476,7 +518,9 @@ server <- function(input, output, session) {
   })
   
   # Render the pivot table
-  output$file_list_pivot <- renderDataTable({
+  output$file_list_pivot <- renderDataTable(
+    # server = FALSE, 
+    {
     datatable(file_list(),
               escape = FALSE,
               extensions = "Buttons",
@@ -490,8 +534,10 @@ server <- function(input, output, session) {
               rownames = FALSE,
               colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
                            "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
-                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", "SD Conf" = "SD.Confidence"))
-  }) 
+                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", "SD Conf" = "SD.Confidence"),
+              selection = "single")
+      
+    }) 
   
   
   # UI for species exclusion and table display 
@@ -506,6 +552,38 @@ server <- function(input, output, session) {
       DT::dataTableOutput("file_list_pivot") %>% withSpinner()
     )
   })
+
+  selected_audio_full <- reactiveValues(file = NULL)
+
+  observeEvent(input$stream_audio, {
+    selectedRow <- input$stream_audio
+    audio_file_path_raw <- unlist(selectedRow)
+
+    selected_audio_full$file <- audio_file_path_raw
+    
+    preview_audio()
+  })
+  
+  preview_audio <- reactive({
+    req(selected_audio_full$file)
+    
+    if (!dir.exists("www")) {
+      dir.create("www")
+    }
+    
+    audio_src <- basename(selected_audio_full$file)
+    dest_path <- file.path("www", audio_src)
+    
+    output_wav <- av_audio_convert(audio = selected_audio_full$file, 
+                                   output = dest_path)
+    
+    # Force UI refresh by generating a new audio tag
+    output$audio_player_full <- renderUI({
+      tags$audio(src = audio_src, type = "audio/wav", controlsList="nodownload", controls = NA, autoplay = TRUE)
+    })
+  })
+  
+  
   
   
   
