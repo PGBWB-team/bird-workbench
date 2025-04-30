@@ -648,13 +648,19 @@ server <- function(input, output, session) {
   # cols <- brewer.pal(5, "Greens")
   # cols <- brewer.pal(5, "YlGn")
   # cols <- brewer.pal(5, "YlGnBu")
-  cols <- brewer.pal(5, "YlOrBr")
-  names(cols) <- c("2020", "2021", "2022", "2023", "2024")
+  # cols <- brewer.pal(5, "YlOrBr")
+  # cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
+  # names(cols) <- year_choices()
   
+  
+  ## year_choices()
   for (i in seq_along(location_list)) {
     local({
       loc <- location_list[i]
       output[[paste0("overviewPlot_", i)]] <- renderPlotly({
+        
+        cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
+        names(cols) <- year_choices()
         
         # Subset by species:
         species_data <- subset(filtered_data(), Species.Code==species_click() & Location == loc)
@@ -719,6 +725,9 @@ server <- function(input, output, session) {
     local({
       loc <- location_list[i]
       output[[paste0("frequencyPlot_", i)]] <- renderPlotly({
+        
+        cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
+        names(cols) <- year_choices()
         
         min_conf <- input$confidence_selection_overview[1]
         max_conf <- input$confidence_selection_overview[2]
