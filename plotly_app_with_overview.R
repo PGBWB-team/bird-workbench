@@ -554,6 +554,7 @@ server <- function(input, output, session) {
   })
 
   selected_audio_full <- reactiveValues(file = NULL)
+  audio_file_path_full <- reactiveVal(NULL)
 
   observeEvent(input$stream_audio, {
     selectedRow <- input$stream_audio
@@ -571,21 +572,25 @@ server <- function(input, output, session) {
       dir.create("www")
     }
     
+    if (!is.null(audio_file_path_full())) {
+      if (file.exists(audio_file_path_full())) {
+        file.remove(audio_file_path_full())
+      }
+    }
+    
     audio_src <- basename(selected_audio_full$file)
     dest_path <- file.path("www", audio_src)
     
     output_wav <- av_audio_convert(audio = selected_audio_full$file, 
                                    output = dest_path)
     
+    audio_file_path_full(dest_path)
+    
     # Force UI refresh by generating a new audio tag
     output$audio_player_full <- renderUI({
       tags$audio(src = audio_src, type = "audio/wav", controlsList="nodownload", controls = NA, autoplay = TRUE)
     })
   })
-  
-  
-  
-  
   
   
   ##################################################
@@ -858,8 +863,15 @@ server <- function(input, output, session) {
         file.remove(audio_file_path())
       }
     }
-    audio_file_path(NULL)
     
+    if (!is.null(audio_file_path_full())) {
+      if (file.exists(audio_file_path_full())) {
+        file.remove(audio_file_path_full())
+      }
+    }
+    
+    audio_file_path(NULL)
+    audio_file_path_full(NULL)
     # Clear the plotly selection
     for (i in seq_along(location_list)) {
       session$sendCustomMessage("plotly-clearSelection", paste0("frequencyPlot_", i))
@@ -1011,6 +1023,12 @@ server <- function(input, output, session) {
     
     if (!dir.exists("www")) {
       dir.create("www")
+    }
+    
+    if (!is.null(audio_file_path())) {
+      if (file.exists(audio_file_path())) {
+        file.remove(audio_file_path())
+      }
     }
     
     audio_src <- paste0(sub("\\.wav$", "", basename(selected_audio$file)), "_", selected_audio$begin_time, "s.wav")
