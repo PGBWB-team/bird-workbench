@@ -89,13 +89,13 @@ ui <- navbarPage(
              !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
                tabPanel(
                  title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
-                 plotlyOutput(outputId = paste0("frequencyPlot_", i)),
+                 plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner(),
                  br()
                )
              })
            ),
            
-           DT::dataTableOutput("filtered_data"),
+           uiOutput("filtered_data_ui"),
            
            br(),
            
@@ -197,14 +197,15 @@ server <- function(input, output, session) {
     datatable(
       data,
       escape = FALSE,
-      extensions = "Buttons",
+      extensions = c("Buttons", "FixedHeader"),
       options = list(
         dom = 'Bfrtip',
         ordering = TRUE,
         buttons = c('csv', 'copy'),
         page_length = nrow(data),
         lengthMenu = list(c(nrow(data)), c("All")),
-        columnDefs = list(list(visible=FALSE, targets= c("Species.Code", "row_index")))
+        columnDefs = list(list(visible=FALSE, targets= c("Species.Code", "row_index"))),
+        fixedHeader = list(header = TRUE)
       ),
       rownames = FALSE,
       selection = list(mode = "single", target = "row")
@@ -647,19 +648,6 @@ server <- function(input, output, session) {
   # List of locations
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
   
-  # Set colors based on year. You'll want to add more colors with each new year. 
-  # cols <- c("2020" = "#F8766D",
-  #           "2021" = "#7CAE00",
-  #           "2022" = "#00BFC4",
-  #           "2023" = "#C77CFF",
-  #           "2024" = "#E68613")
-  # cols <- brewer.pal(5, "Greens")
-  # cols <- brewer.pal(5, "YlGn")
-  # cols <- brewer.pal(5, "YlGnBu")
-  # cols <- brewer.pal(5, "YlOrBr")
-  # cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
-  # names(cols) <- year_choices()
-  
   
   ## year_choices()
   for (i in seq_along(location_list)) {
@@ -669,6 +657,9 @@ server <- function(input, output, session) {
         
         cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
         names(cols) <- year_choices()
+        
+        line_size <- round(seq(0, 1.2, length.out = length(year_choices())), 3)
+        names(line_size) <- year_choices()
         
         # Subset by species:
         species_data <- subset(filtered_data(), Species.Code==species_click() & Location == loc)
@@ -702,10 +693,11 @@ server <- function(input, output, session) {
         
         # Create the plot
         p <- ggplot(species_data, aes(x = Week)) +
-          geom_freqpoly(binwidth=1,aes(color = as.factor(Year))) +
+          geom_freqpoly(binwidth=1,aes(color = as.factor(Year), size = as.factor(Year))) +
           scale_x_continuous(breaks = 1:52, limits = c(1, 52)) +
           labs(title = loc, x = "Week", y = "Frequency") +
           scale_color_manual(name = "Year", values = cols) +
+          scale_size_manual(name = "Year", values = line_size) +
           theme_minimal()
         
         # Convert to an interactive plotly object and register the click event
@@ -1002,6 +994,15 @@ server <- function(input, output, session) {
         data.frame()
       }
     })
+    
+    output$filtered_data_ui <- renderUI({
+      req(selected_data())  # only show the table + spinner if there is selected data
+      
+      withSpinner(
+        DT::dataTableOutput("filtered_data")
+      )
+    })
+    
   })
   
   selected_audio <- reactiveValues(file = NULL, begin_time = NULL)
