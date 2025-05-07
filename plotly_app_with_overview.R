@@ -21,12 +21,12 @@ library(shinycssloaders)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
-all_data <- fst::read_fst("/Users/laurenwick/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst",
+all_data <- fst::read_fst("/Users/laure/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst",
                           columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
                                       "Begin.Path", "Location", "Date", "Date.Time"))
 
 # Set root folder for audio files
-audio_filepath <- "/Users/laurenwick/Dropbox/Lauren Wick/"
+audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 ui <- navbarPage(
   theme = bs_theme(version = 5),
@@ -140,9 +140,8 @@ ui <- navbarPage(
            )
   ),
   
-  tabPanel(title = tags$span(class = "nav-tab-right", "Mike's Page"),
+  tabPanel(title = "File Analysis",
            value = "audio_file_overview",
-           div(class = "red-warning-box", textOutput("warning_message_files")),
            uiOutput("audio_player_full"),
            uiOutput("audio_file_pivot_view")
   ),
@@ -165,15 +164,6 @@ ui <- navbarPage(
       width: 100%;
     }
 
-    .nav-tab-right {
-      margin-left: auto !important;
-      background-color: #f8d7da !important; /* light red background */
-      color: #721c24 !important;           /* dark red text */
-      font-weight: bold;
-      border-radius: 5px;
-      padding: 6px 12px;
-    }
-
     .nav-tab-right:hover {
       background-color: #f5c6cb !important; /* slight hover change */
       color: #721c24 !important;
@@ -183,15 +173,6 @@ ui <- navbarPage(
       order: 2;
     }
     
-    .red-warning-box {
-      background-color: #f8d7da;
-      color: #721c24;
-      font-weight: bold;
-      padding: 10px;
-      border-radius: 5px;
-      margin: 20px auto;
-      display: table;
-    }
   "))
   )
   
@@ -210,6 +191,9 @@ server <- function(input, output, session) {
   species_click <- reactiveVal("acafly") # Default species code
 
   create_table_pivot <- function(data) {
+    # Add a helper column with row index for DT styling
+    data$row_index <- seq_len(nrow(data))
+    
     datatable(
       data,
       escape = FALSE,
@@ -220,11 +204,16 @@ server <- function(input, output, session) {
         buttons = c('csv', 'copy'),
         page_length = nrow(data),
         lengthMenu = list(c(nrow(data)), c("All")),
-        columnDefs = list(list(visible=FALSE, targets="Species.Code"))
+        columnDefs = list(list(visible=FALSE, targets= c("Species.Code", "row_index")))
       ),
       rownames = FALSE,
       selection = list(mode = "single", target = "row")
-    )
+    ) %>%
+      formatStyle(
+        "row_index",
+        target = "row",
+        fontStyle = styleEqual(1, "italic")
+      )
   }
   
   create_pivot_month <- function(df, yr_input = "All") {
@@ -234,10 +223,14 @@ server <- function(input, output, session) {
       group_by(Common.Name, Species.Code, Month) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Month, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
+      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) 
+   
+    num_birds <- nrow(df[df$Common.Name != "nocall",])   
+    df <- df %>%
       bind_rows(summarise(.,
                           across(where(is.numeric), sum),
-                          across(where(is.character), ~"Total")))
+                          across(where(is.character), ~ paste(num_birds, "Unique Species"))))
+    
     # Reorder the columns: Common.Name, Species.Code, then months in order
     month_order <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -250,6 +243,7 @@ server <- function(input, output, session) {
     }
     
     df <- df %>% select(Common.Name, Species.Code, Total.Count, all_of(month_order))
+    df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
     return(df)
   }
 
@@ -261,10 +255,15 @@ server <- function(input, output, session) {
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, Total.Count, everything()) %>%
+      select(Common.Name, Total.Count, everything()) 
+    
+    num_birds <- nrow(df[df$Common.Name != "nocall",])    
+    df <- df %>%
       bind_rows(summarise(.,
                           across(where(is.numeric), sum),
-                          across(where(is.character), ~"Total")))
+                          across(where(is.character), ~ paste(num_birds, "Unique Species"))))
+
+    df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
     return(df)
   }
 
@@ -275,10 +274,15 @@ server <- function(input, output, session) {
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, Total.Count, everything()) %>%
+      select(Common.Name, Total.Count, everything())
+    
+    num_birds <- nrow(df[df$Common.Name != "nocall",])    
+    df <- df %>%
       bind_rows(summarise(.,
                           across(where(is.numeric), sum),
-                          across(where(is.character), ~"Total")))
+                          across(where(is.character), ~ paste(num_birds, "Unique Species"))))
+    
+    df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
     return(df)
   }
   
@@ -410,7 +414,6 @@ server <- function(input, output, session) {
   ## Application Build: Audio File Overview ##
   ############################################
   
-  output$warning_message_files <- renderText("If you're not Mike, this page probably won't interest you :-)")
   species_values <- unique(all_data$Common.Name)
   default_species_vals <- c("American Crow", "American Goldfinch", "American Woodcock",
                             "Blue Jay", "Hairy Woodpecker", "Red-bellied Woodpecker", 
@@ -669,6 +672,11 @@ server <- function(input, output, session) {
         
         # Subset by species:
         species_data <- subset(filtered_data(), Species.Code==species_click() & Location == loc)
+        
+        # Check if species_data has any rows
+        validate(
+          need(nrow(species_data) > 0, paste("\n No observations available for this species at the", loc, "location."))
+        )
         
         # Extract Week, Year, and create Week.Year.Loc variable
         species_data <- species_data %>%
