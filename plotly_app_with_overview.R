@@ -217,9 +217,10 @@ server <- function(input, output, session) {
       )
   }
   
-  create_pivot_month <- function(df, yr_input = "All") {
+  create_pivot_month <- function(df, yr_input = "All", loc_input = "All") {
     df <- df %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
+      filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       mutate(Month = factor(month.abb[lubridate::month(as.Date(Date))], levels = month.abb)) %>%
       group_by(Common.Name, Species.Code, Month) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
@@ -248,29 +249,45 @@ server <- function(input, output, session) {
     return(df)
   }
 
-  create_pivot_year <- function(df, loc_input = "All") {
+  create_pivot_year <- function(df, loc_input = "All", month_sel) {
     df <- df %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
+      filter(lubridate::month(as.Date(Date), label = TRUE) %in% month_sel) %>%
       mutate(Date = as.Date(Date), Year = year(Date)) %>%
       group_by(Common.Name, Species.Code, Year) %>%
-      summarize(Count_by_Species = n(), .groups = "drop") %>%
-      pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
-      mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, Total.Count, everything()) 
+      summarize(Count_by_Species = n(), .groups = "drop")
     
-    num_birds <- nrow(df[df$Common.Name != "nocall",])    
+    # Capture and sort year columns before pivoting
+    year_cols <- sort(unique(df$Year))
+    
     df <- df %>%
-      bind_rows(summarise(.,
-                          across(where(is.numeric), sum),
-                          across(where(is.character), ~ paste(num_birds, "Unique Species"))))
-
-    df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
+      pivot_wider(names_from = Year, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0))
+    
+    df <- df %>%
+      mutate(Total.Count = rowSums(select(., all_of(as.character(year_cols))), na.rm = TRUE)) %>%
+      select(Common.Name, Species.Code, Total.Count, all_of(as.character(year_cols)))
+    
+    # Add summary row at top
+    num_birds <- nrow(df[df$Common.Name != "nocall",])
+    summary_row <- df %>%
+      summarise(
+        Common.Name = paste(num_birds, "Unique Species"),
+        Species.Code = "",
+        Total.Count = sum(df$Total.Count),
+        across(all_of(as.character(year_cols)), sum)
+      )
+    
+    df <- bind_rows(summary_row, df)
+    
     return(df)
   }
 
-  create_pivot_location <- function(df, yr_input = "All") {
+
+  create_pivot_location <- function(df, yr_input = "All", month_sel) {
     df <- df %>%
-      filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
+      filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>% 
+      filter(lubridate::month(as.Date(Date), label = TRUE) %in% month_sel) %>%
+      # filter(as.Date(Date) >= date_input[1] & as.Date(Date) <= date_input[2]) %>%
       group_by(Common.Name, Species.Code, Location) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
@@ -311,21 +328,26 @@ server <- function(input, output, session) {
   # Reactives that generate pivots on demand
   species_by_month <- reactive({
     req(input$year_sel)
+    req(input$loc_sel)
     req(filtered_data())
-    create_pivot_month(filtered_data(), input$year_sel)
-  }) %>% bindCache(input$year_sel, input$confidence_selection_overview)
+    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel)
+  }) %>% bindCache(input$year_sel, input$loc_sel, input$confidence_selection_overview)
+  
+  debounced_month_sel <- debounce(reactive(input$month_sel), 500)
   
   species_by_location <- reactive({
     req(input$year_sel)
+    req(debounced_month_sel())
     req(filtered_data())
-    create_pivot_location(filtered_data(), input$year_sel)
-  }) %>% bindCache(input$year_sel, input$confidence_selection_overview)
+    create_pivot_location(filtered_data(), input$year_sel, debounced_month_sel())
+  }) %>% bindCache(input$year_sel, debounced_month_sel(), input$confidence_selection_overview)
   
   species_by_year <- reactive({
     req(input$loc_sel)
+    req(debounced_month_sel())
     req(filtered_data())
-    create_pivot_year(filtered_data(), input$loc_sel)
-  }) %>% bindCache(input$loc_sel, input$confidence_selection_overview)
+    create_pivot_year(filtered_data(), input$loc_sel, debounced_month_sel())
+  }) %>% bindCache(input$loc_sel, debounced_month_sel(), input$confidence_selection_overview)
   
   # Table rendering
   output$species_by_month_pivot <- renderDataTable({
@@ -352,6 +374,13 @@ server <- function(input, output, session) {
     locs <- locs[order(locs)]
     c(setNames(as.list(locs), locs), "All" = "All")
   }) %>% bindCache(all_data)
+  
+  month_choices <- reactive({
+    months <- unique(lubridate::month(all_data$Date, label = TRUE, abbr = TRUE))
+    months <- factor(months, levels = month.abb)  # Keep order
+    months <- sort(months)
+    c(setNames(as.list(as.character(months)), as.character(months)))
+  }) %>% bindCache(all_data)
 
   # Dynamic UI based on selection
   output$overview_view <- renderUI({
@@ -360,18 +389,23 @@ server <- function(input, output, session) {
     if (input$sel_view == "by_month") {
       tagList(
         selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
         DT::dataTableOutput("species_by_month_pivot") %>% withSpinner()
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
         selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+        selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
+                    multiple = TRUE),
         DT::dataTableOutput("species_by_location_pivot") %>% withSpinner()
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
         selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
+        selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
+                    multiple = TRUE),
         DT::dataTableOutput("species_by_year_pivot") %>% withSpinner()
       )
     }
@@ -655,10 +689,10 @@ server <- function(input, output, session) {
       loc <- location_list[i]
       output[[paste0("overviewPlot_", i)]] <- renderPlotly({
         
-        cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
+        cols <- viridis(length(year_choices()), direction = 1, option = "plasma")
         names(cols) <- year_choices()
         
-        line_size <- round(seq(0, 1.2, length.out = length(year_choices())), 3)
+        line_size <- round(seq(.3, 1, length.out = length(year_choices())), 3)
         names(line_size) <- year_choices()
         
         # Subset by species:
@@ -731,7 +765,7 @@ server <- function(input, output, session) {
       loc <- location_list[i]
       output[[paste0("frequencyPlot_", i)]] <- renderPlotly({
         
-        cols <- viridis(length(year_choices()), direction = -1, option = "plasma")
+        cols <- viridis(length(year_choices()), direction = 1, option = "plasma")
         names(cols) <- year_choices()
         
         min_conf <- input$confidence_selection_overview[1]
