@@ -124,7 +124,7 @@ ui <- navbarPage(
              )
            ),
            
-           uiOutput("audio_player"),
+           uiOutput("audio_player") %>% withSpinner(),
            downloadButton("audioDownload", "Download Audio"),
            plotOutput("spectrogram")),
            
@@ -889,7 +889,6 @@ server <- function(input, output, session) {
     selected_data(NULL)
     audio_player(NULL)
     spectrogram(NULL)
-    audio_player(NULL)
     output$audio_player <- NULL
     
     if (!is.null(audio_file_path())) {
@@ -1116,12 +1115,12 @@ server <- function(input, output, session) {
   output$audio_player <- renderUI({
     req(audio_player())
     audio_player()
-  })
+  }) 
   
   output$spectrogram <- renderPlot({
     req(spectrogram())
     spectrogram()
-  })
+  }) 
   
   
 }
