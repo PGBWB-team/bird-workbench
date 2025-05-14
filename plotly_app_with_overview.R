@@ -18,6 +18,7 @@ library(shinyjs)
 library(glue)
 library(hms)
 library(shinycssloaders)
+library(shiny.router)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
@@ -881,13 +882,11 @@ server <- function(input, output, session) {
   selected_data <- reactiveVal(NULL)
   
   # Create reactive values to store audio and spectrogram
-  audio_player <- reactiveVal(NULL)
   spectrogram <- reactiveVal(NULL)
   audio_file_path <- reactiveVal(NULL)
 
   observeEvent(input$tab_selection, {
     selected_data(NULL)
-    audio_player(NULL)
     spectrogram(NULL)
     output$audio_player <- NULL
     
@@ -1110,12 +1109,7 @@ server <- function(input, output, session) {
     },
     contentType = "audio/wav"
   )
-  
-  # Show the name of the employee that has been clicked on
-  output$audio_player <- renderUI({
-    req(audio_player())
-    audio_player()
-  }) 
+
   
   output$spectrogram <- renderPlot({
     req(spectrogram())
