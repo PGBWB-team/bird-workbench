@@ -18,7 +18,7 @@ library(shinyjs)
 library(glue)
 library(hms)
 library(shinycssloaders)
-library(shiny.router)
+
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
@@ -34,7 +34,7 @@ ui <- navbarPage(
   id = "main_nav",
   title = "BirdNet-Analyzer Data Visualization",
   selected = "ph_overview",
-  
+
   # Shared sliderInput for confidence
     card(
       height = "185px",
@@ -42,10 +42,10 @@ ui <- navbarPage(
         tags$div(
           style = "position: relative; width: 86%; margin: 0 auto;",  # align block
           sliderInput(
-            inputId = "confidence_selection_overview", 
+            inputId = "confidence_selection_overview",
             label = "BirdNET Happiness Scale",
-            min = 0, 
-            max = 1, 
+            min = 0,
+            max = 1,
             value = c(0.7, 1),
             step = 0.01,
             width = "100%"
@@ -59,32 +59,32 @@ ui <- navbarPage(
         )
       )
   ),
-  
-  tabPanel(title = "Prairie Haven Overview", value = "ph_overview", 
-           selectInput(inputId = "sel_view", 
+
+  tabPanel(title = "Prairie Haven Overview", value = "ph_overview",
+           selectInput(inputId = "sel_view",
                        label = "Pivot Table Selection",
                        choices = list("Species by Month" = "by_month",
-                                      "Species by Location" = "by_location", 
+                                      "Species by Location" = "by_location",
                                       "Species by Year" = "by_year"),
                        selected = "by_month"),
            uiOutput("overview_view") %>% withSpinner()
   ),
-  
-  tabPanel(title = "Species-Specific Location Drilldown", 
+
+  tabPanel(title = "Species-Specific Location Drilldown",
            value = "species_loc_drilldown",
-    
+
              card(
                radioButtons(
                  inputId = "time_interval",
                  label = "Time Interval",
-                 choices = c("Week" = "weekly", "Month" = "monthly"), 
+                 choices = c("Week" = "weekly", "Month" = "monthly"),
                  selected = "weekly"
                )
              ),
-             
+
            uiOutput("species_title"),
            uiOutput("species_link"),
-           
+
            tabsetPanel(
              id = "tab_selection",
              !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
@@ -95,11 +95,11 @@ ui <- navbarPage(
                )
              })
            ),
-           
+
            uiOutput("filtered_data_ui"),
-           
+
            br(),
-           
+
            card(
              card_header("Audio Segment Parameters"),
              card_body(
@@ -112,7 +112,7 @@ ui <- navbarPage(
                  step = 1,
                  round = TRUE
                ),
-               
+
                sliderInput(
                  inputId = "recording_offset",
                  label = "Recording Offset (seconds)",
@@ -124,12 +124,12 @@ ui <- navbarPage(
                )
              )
            ),
-           
+
            uiOutput("audio_player") %>% withSpinner(),
            downloadButton("audioDownload", "Download Audio"),
            plotOutput("spectrogram")),
-           
-           
+
+
   tabPanel(title = "Species-Specific Overview",
            value = "species_overview",
            uiOutput("species_title_overview"),
@@ -140,13 +140,13 @@ ui <- navbarPage(
              })
            )
   ),
-  
+
   tabPanel(title = "File Analysis",
            value = "audio_file_overview",
            uiOutput("audio_player_full"),
            uiOutput("audio_file_pivot_view")
   ),
-  
+
   # Add your custom script for clearing Plotly selection
   tags$script(HTML("
   Shiny.addCustomMessageHandler('plotly-clearSelection', function(plotId) {
@@ -156,7 +156,7 @@ ui <- navbarPage(
     }
   });
 ")),
-  
+
   tags$head(
     tags$style(HTML("
     .navbar-nav {
@@ -173,23 +173,84 @@ ui <- navbarPage(
     .navbar-nav > li:last-child {
       order: 2;
     }
-    
+
   "))
   )
-  
-  
-  )
 
+
+  )
 
 
 
 server <- function(input, output, session) {
   
+  #################
+  ## URL Routing ##
+  #################
+  # Reactive value to store the selected species code
+  species_click <- reactiveVal("acafly") # Default species code
+  
+  observeEvent(session$clientData$url_hash, {
+    fullHash <- session$clientData$url_hash # e.g., "#species_overview?species=cedwre"
+    fullHash <- sub("^#", "", fullHash)
+    
+    tab <- strsplit(fullHash, "\\?")[[1]][1]
+    queryString <- strsplit(fullHash, "\\?")[[1]][2]
+    
+    species <- NULL
+    if (!is.na(queryString)) {
+      params <- strsplit(queryString, "&")[[1]]
+      params_list <- setNames(
+        sapply(strsplit(params, "="), `[`, 2),
+        sapply(strsplit(params, "="), `[`, 1)
+      )
+      species <- params_list[["species"]]
+    }
+    
+    if (!is.null(tab)) {
+      freezeReactiveValue(input, "main_nav")
+      updateNavbarPage(session, "main_nav", selected = tab)
+    }
+    
+    if (!is.null(species)) {
+      species_click(species)
+    }
+  }, priority = 1)
+  
+  
+  observeEvent(input$main_nav, {
+    currentHash <- sub("#", "", session$clientData$url_hash)
+    
+    # If species_click() is defined, include it in the URL
+    if (input$main_nav %in% c("species_overview", "species_loc_drilldown") && !is.null(species_click())) {
+      pushQueryString <- paste0("#", input$main_nav, "?species=", species_click())
+    } else {
+      pushQueryString <- paste0("#", input$main_nav)
+    }
+    
+    if (is.null(currentHash) || currentHash != input$main_nav) {
+      freezeReactiveValue(input, "main_nav")  # avoid unnecessary reactivity loop
+      updateQueryString(pushQueryString, mode = "push", session)
+    }
+  }, priority = 0)
+  
+  
+  observeEvent(species_click(), {
+    req(species_click())
+    req(input$main_nav %in% c("species_overview", "species_loc_drilldown"))
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?species=", species_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+  })
+  
+  
   ###############################################
   ## Application Build: Prairie Haven Overview ##
   ###############################################
-  # Reactive value to store the selected species code
-  species_click <- reactiveVal("acafly") # Default species code
+  
 
   create_table_pivot <- function(data) {
     # Add a helper column with row index for DT styling
