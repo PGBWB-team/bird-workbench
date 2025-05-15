@@ -32,7 +32,7 @@ audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 ui <- navbarPage(
   theme = bs_theme(version = 5),
   id = "main_nav",
-  title = "BirdNet-Analyzer Data Visualization",
+  title = "Pretty Good Bird Workbench",
   selected = "ph_overview",
 
   # Shared sliderInput for confidence
@@ -991,25 +991,37 @@ server <- function(input, output, session) {
       }
       
       file_name <- basename(row[["Begin.Path"]])
-      year <- year(row[["Date"]])
-      file_loc <- paste0(audio_filepath, "Bio ", as.character(year), "/From Recorders")
-      
-      if (is.null(row[["Begin.Time..s."]])) {
-        return(NULL)
-      }
-      
-      start_time <- as.numeric(row[["Begin.Time..s."]])
-      
-      
+      year_val <- year(row[["Date"]])
+      file_loc <- paste0(audio_filepath, "Bio ", as.character(year_val), "/From Recorders")
       audio_loc <- file.path(file_loc, file_name)
       
-      if (is.null(audio_loc) || audio_loc == "" || !file.exists(audio_loc)) {
+      if (!file.exists(audio_loc)) {
         return(NULL)
       }
       
-      return(paste0(audio_loc, "***", start_time))
+      begin_time <- as.numeric(row[["Begin.Time..s."]])
+      species_name <- row[["Species.Code"]]
+      species_code <- row[["Species.Code"]]
+      conf <- row[["Confidence"]]
+      loc <- row[["Location"]]
+      
+      # Encode for URL
+      species_name <- URLencode(species_name)
+      file_name <- URLencode(file_name)
+      loc <- URLencode(loc)
+      
+      url <- paste0(
+        "enter_session_here",
+        "species_name=", species_name,
+        "&species_code=", species_code,
+        "&conf=", conf,
+        "&loc=", loc,
+        "&file_name=", file_name,
+        "&begin_time=", begin_time
+      )
+      
+      return(url)
     }
-    
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
@@ -1057,24 +1069,18 @@ server <- function(input, output, session) {
         # Add action buttons for opening the website
         out_df <- out_df %>%
           rowwise() %>%
-          mutate(
-            Sound.Button = list({
-              audio_id <- find_audio_file(.data)
-
-              if (!is.null(audio_id)) {
-                shinyInput(
-                  FUN = actionButton,
-                  id = audio_id,
-                  label = "Audio", 
-                  onclick = 'Shiny.setInputValue(\"play_button\", this.id, {priority: \"event\"})'
-                )
-              }
-              else {
-                "No Audio File"
-              }
-            })
-            
-          ) %>%
+          mutate(Sound.Button = list({
+            url_val <- find_audio_file(.data)
+            if (!is.null(url_val)) {
+              paste0(
+                '<a class="btn btn-primary" target="_blank" href="',
+                find_audio_file(.data),
+                '">Open Observation</a>'
+              )
+            } else {
+              "No Audio Available"
+            }
+          })) %>%
           select("Sound.Button", "Confidence", 
                  "Begin.Time..s.", "Date", 
                  "Begin.Path", "Species.Code") %>%
@@ -1097,85 +1103,6 @@ server <- function(input, output, session) {
     })
     
   })
-  
-  selected_audio <- reactiveValues(file = NULL, begin_time = NULL)
-  
-  observeEvent(input$play_button, {
-    selectedRow <- input$play_button
-    audio_file_path_raw <- unlist(strsplit(selectedRow, "***", fixed=TRUE))[[1]]
-    begin_time <- as.numeric(unlist(strsplit(selectedRow, "***", fixed=TRUE))[[2]])
-    
-    selected_audio$file <- audio_file_path_raw
-    selected_audio$begin_time <- begin_time
-    
-    update_audio_and_spectrogram()
-  })
-  
-  observeEvent(c(input$recording_length, input$recording_offset), {
-    if (!is.null(selected_audio$file)) {
-      update_audio_and_spectrogram()
-    }
-  })
-  
-  update_audio_and_spectrogram <- reactive({
-    req(selected_audio$file)
-    
-    recording_secs <- input$recording_length
-    recording_offset <- input$recording_offset
-    
-    if (!dir.exists("www")) {
-      dir.create("www")
-    }
-    
-    if (!is.null(audio_file_path())) {
-      if (file.exists(audio_file_path())) {
-        file.remove(audio_file_path())
-      }
-    }
-    
-    audio_src <- paste0(sub("\\.wav$", "", basename(selected_audio$file)), "_", selected_audio$begin_time, "s.wav")
-    dest_path <- file.path("www", audio_src)
-    
-    output_wav <- av_audio_convert(audio = selected_audio$file, 
-                                   output = dest_path,
-                                   start_time = selected_audio$begin_time - as.numeric(recording_offset),
-                                   total_time = as.numeric(recording_secs))
-    
-    audio_file_path(dest_path)
-    
-    # Force UI refresh by generating a new audio tag
-    output$audio_player <- renderUI({
-      tags$audio(src = audio_src, type = "audio/wav", controls = TRUE, autoplay = TRUE)
-    })
-    
-    audio_wav <- tuneR::readWave(output_wav)
-    
-    v <- seewave::ggspectro(audio_wav, ovlp = 50) +
-      geom_tile(aes(fill = amplitude)) +
-      ylim(0, 12) +
-      scale_fill_gradientn(colours = viridis(256, option = "B"),
-                           limits = c(-90, 0))
-    
-    spectrogram(v)
-  })
-  
-  output$audioDownload <- downloadHandler(
-    filename = function() {
-      req(audio_file_path())
-      paste(basename(audio_file_path()))
-    },
-    content = function(file) {
-      req(audio_file_path())
-      file.copy(audio_file_path(), file)
-    },
-    contentType = "audio/wav"
-  )
-
-  
-  output$spectrogram <- renderPlot({
-    req(spectrogram())
-    spectrogram()
-  }) 
   
   
 }
