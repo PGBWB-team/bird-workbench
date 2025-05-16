@@ -276,6 +276,10 @@ server <- function(input, output, session) {
         "row_index",
         target = "row",
         fontStyle = styleEqual(1, "italic")
+      ) %>%
+      formatStyle(
+        "Total.Count",
+        fontStyle = "italic"
       )
   }
   
@@ -306,7 +310,7 @@ server <- function(input, output, session) {
       }
     }
     
-    df <- df %>% select(Common.Name, Species.Code, Total.Count, all_of(month_order))
+    df <- df %>% select(Common.Name, Species.Code, all_of(month_order), Total.Count)
     df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
     return(df)
   }
@@ -327,7 +331,7 @@ server <- function(input, output, session) {
     
     df <- df %>%
       mutate(Total.Count = rowSums(select(., all_of(as.character(year_cols))), na.rm = TRUE)) %>%
-      select(Common.Name, Species.Code, Total.Count, all_of(as.character(year_cols)))
+      select(Common.Name, Species.Code, all_of(as.character(year_cols)), Total.Count)
     
     # Add summary row at top
     num_birds <- nrow(df[df$Common.Name != "nocall",])
@@ -339,7 +343,8 @@ server <- function(input, output, session) {
         across(all_of(as.character(year_cols)), sum)
       )
     
-    df <- bind_rows(summary_row, df)
+    df <- bind_rows(summary_row, df) %>%
+      select(Common.Name, Species.Code, all_of(as.character(year_cols)), Total.Count)
     
     return(df)
   }
@@ -354,7 +359,7 @@ server <- function(input, output, session) {
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, Total.Count, everything())
+      select(Common.Name, everything(), Total.Count)
     
     num_birds <- nrow(df[df$Common.Name != "nocall",])    
     df <- df %>%
@@ -623,13 +628,14 @@ server <- function(input, output, session) {
     {
     datatable(file_list(),
               escape = FALSE,
-              extensions = "Buttons",
+              extensions = c("Buttons", "FixedHeader"),
               filter = "top",
               options = list(
                 dom = "Bfrtip",
                 ordering = TRUE,
                 buttons = c("csv", "copy"),
-                pageLength = 100
+                pageLength = 100,
+                fixedHeader = list(header = TRUE)
               ),
               rownames = FALSE,
               colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
@@ -1011,7 +1017,7 @@ server <- function(input, output, session) {
       loc <- URLencode(loc)
       
       url <- paste0(
-        "enter_session_here",
+        "http://127.0.0.1:6102?",
         "species_name=", species_name,
         "&species_code=", species_code,
         "&conf=", conf,
@@ -1088,7 +1094,11 @@ server <- function(input, output, session) {
         
         datatable(out_df, 
                   escape = FALSE,
-                  selection = "none")
+                  extensions = "FixedHeader",
+                  selection = "none",
+                  options = list(
+                    fixedHeader = list(header = TRUE)
+                  ))
       } else {
         data.frame()
       }

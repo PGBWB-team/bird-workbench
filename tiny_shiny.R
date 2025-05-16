@@ -2,13 +2,6 @@
 # Set root folder for audio files
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
-# # URL parameters (manually entered for now, but will eventually be passed via URL by parent shiny app)
-# species_name <- "Trumpeter Swan"
-# species_code <- "truswa"
-# conf <- "0.81"
-# loc <- "House"
-# file_name <- "SM-SCH1-V2_20240225_055200.wav"
-# begin_time <- "1368.0"
 
 # UI code:
 ui <- page_sidebar(
