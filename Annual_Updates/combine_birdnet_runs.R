@@ -3,18 +3,28 @@
 library(lubridate)
 library(fst)
 
-# Set file path variables
+#################################################
+# Set file path variables (Requires User Input) #
+#################################################
+
 # These files contains the BirdNET-Analyzer results for each year and for all confidence levels
 # *** Add a new file variable for a new year *** #
-file_2024 <- "your_directory/Combined_2024_V1.txt"
-file_2023 <- "your_directory/Combined_2023_V1.txt"
-file_2022 <- "your_directory/Combined_2022_V1.txt"
-file_2021 <- "your_directory/Combined_2021_V1.txt"
-file_2020 <- "your_directory/Combined_2020_V1.txt"
+file_2024 <- "C:/Users/laure/Dropbox/Lauren Wick/2024 BirdNET runs//Combined_2024_V1.txt"
+file_2023 <- "C:/Users/laure/Dropbox/Lauren Wick/2023 BirdNET runs//Combined_2023_V1.txt"
+file_2022 <- "C:/Users/laure/Dropbox/Lauren Wick/2022 BirdNET runs//Combined_2022_V1.txt"
+file_2021 <- "C:/Users/laure/Dropbox/Lauren Wick/2021 BirdNET runs//Combined_2021_V1.txt"
+file_2020 <- "C:/Users/laure/Dropbox/Lauren Wick/2020 BirdNET runs//Combined_2020_V1.txt"
 
 # Combine file variables into one list
 # *** Add new file variable to the list function *** #
 file_list <- c(file_2024, file_2023, file_2022, file_2021, file_2020)
+
+# Set file path for writing .fst output
+fst_output <- "C:/Users/laure/Dropbox/Prairie HAven/FST Output/fst_output_052025.fst"
+
+################
+# Start script #
+################
 
 # Read each file as a table
 data <- lapply(file_list, read.table, header=TRUE, sep="\t", colClasses="character", quote="\"")
@@ -42,6 +52,27 @@ normalize_length <- function(x, target_length = 3) {
   }
 }
 
+get_week_from_date <- function(date) {
+  if (anyNA(date)) return(NA_integer_)
+  
+  # Extract year from the given date
+  year <- as.integer(format(date, "%Y"))
+  
+  # Get the first day of the year
+  first_day <- as.Date(paste0(year, "-01-01"))
+  
+  # Find the first Sunday of the year
+  first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
+  
+  # Calculate the difference in days between the given date and the first Sunday
+  days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
+  
+  # Determine week number
+  week_number <- (days_since_first_sunday %/% 7) +1
+  
+  return(week_number)
+}
+
 # Add columns for Location, Date, and Date.Time, Day.Of.Year
 # These variables are derived from the File Path variable
 data_70 <- lapply(data_70, function(df) {
@@ -50,6 +81,9 @@ data_70 <- lapply(data_70, function(df) {
   df["Date"] <- as.Date(df$Date, "%Y%m%d")
   df["Date.Time"] <- ymd_hms(df$Date.Time, tz="UTC")
   df["Day.Of.Year"] <- yday(df$Date)
+  df["Month"] <- factor(month.abb[lubridate::month(as.Date(df$Date))], levels = month.abb)
+  df["Week"] <- get_week_from_date(df$Date)
+
   return(df)
 })
 
@@ -86,7 +120,7 @@ data_70_subset <- lapply(data_70, subset, Location %in% location_list)
 all_data <- do.call('rbind', data_70_subset)
 
 # Save as fst file to read in the data in the future without needing to process it again. 
-write_fst(all_data, "your_directory/70conf_2020_to_2024.fst")
+write_fst(all_data, fst_output)
 
 ####################
 # HELPER FUNCTIONS #
