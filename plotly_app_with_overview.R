@@ -19,6 +19,9 @@ library(glue)
 library(hms)
 library(shinycssloaders)
 
+#################################################
+# Set file path variables (Requires User Input) #
+#################################################
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
@@ -28,6 +31,13 @@ all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_out
 
 # Set root folder for audio files
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
+
+# Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
+tiny_shiny <- "enter path here"
+
+##############
+# Start Code #
+##############
 
 ui <- navbarPage(
   theme = bs_theme(version = 5),
@@ -1007,6 +1017,7 @@ server <- function(input, output, session) {
     selected_data(NULL)
     spectrogram(NULL)
     output$audio_player <- NULL
+    output$filtered_data_ui <- NULL
     
     if (!is.null(audio_file_path())) {
       if (file.exists(audio_file_path())) {
@@ -1022,6 +1033,7 @@ server <- function(input, output, session) {
     
     audio_file_path(NULL)
     audio_file_path_full(NULL)
+    
     # Clear the plotly selection
     for (i in seq_along(location_list)) {
       session$sendCustomMessage("plotly-clearSelection", paste0("frequencyPlot_", i))
@@ -1068,7 +1080,7 @@ server <- function(input, output, session) {
       loc <- URLencode(loc)
       
       url <- paste0(
-        "http://127.0.0.1:6102?",
+        tiny_shiny,
         "species_name=", species_name,
         "&species_code=", species_code,
         "&conf=", conf,

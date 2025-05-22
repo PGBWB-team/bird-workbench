@@ -9,10 +9,17 @@ library(av)
 library(seewave)
 library(viridisLite)
 
+#################################################
+# Set file path variables (Requires User Input) #
+#################################################
+
 # Set root folder for audio files
 audio_filepath <- "enter file path for audio files here"
 parent_shiny_url <- "enter path for parent shiny app"
 
+##############
+# Start Code #
+##############
 
 # UI code:
 ui <- page_sidebar(
