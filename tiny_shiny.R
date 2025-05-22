@@ -1,6 +1,17 @@
+library(shiny)
+library(bslib)
+library(dplyr)
+library(shinycssloaders)
+library(shinyjs)
+library(ggplot2)
+library(lubridate)
+library(av)
+library(seewave)
+library(viridisLite)
 
 # Set root folder for audio files
-audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
+audio_filepath <- "enter file path for audio files here"
+parent_shiny_url <- "enter path for parent shiny app"
 
 
 # UI code:
@@ -40,7 +51,8 @@ ui <- page_sidebar(
   
   plotOutput("spectrogram") %>% withSpinner(),
   uiOutput("audio_player") %>% withSpinner(),
-  downloadButton("audioDownload", "Download Audio")
+  downloadButton("audioDownload", "Download Audio"),
+  uiOutput("parent_url") 
   )
 
 # Server Code:
@@ -167,6 +179,15 @@ server <- function(input, output, session) {
       }, 
       contentType = "audio/wav"
     )
+    
+    routing_text <- "/#species_loc_drilldown?species="
+    url_full <- paste0(parent_shiny_url, routing_text, values$species_code)
+    
+    output$parent_url <- renderUI(
+      HTML(paste0('<a class="btn btn-primary" target="_blank" href="',
+             url_full,
+             '">Go to Species Drilldown</a>')
+    ))
   })
   
 
