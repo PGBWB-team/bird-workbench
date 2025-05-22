@@ -94,7 +94,7 @@ ui <- navbarPage(
            ),
            
            p("Select a row below to view species specific details"),
-           uiOutput("pivot_dt")
+           uiOutput("pivot_dt") %>% withSpinner()
   ),
 
   tabPanel(title = "Species-Specific Location Drilldown",
@@ -1057,7 +1057,7 @@ server <- function(input, output, session) {
       }
       
       begin_time <- as.numeric(row[["Begin.Time..s."]])
-      species_name <- row[["Species.Code"]]
+      species_name <- row[["Common.Name"]]
       species_code <- row[["Species.Code"]]
       conf <- row[["Confidence"]]
       loc <- row[["Location"]]
@@ -1114,13 +1114,13 @@ server <- function(input, output, session) {
         if (input$time_interval == "weekly") {
           out_df <- subset(complete_data, (Week.Year.Loc %in% selected_data()$key & 
                                              as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date"))
+                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date", "Common.Name"))
         }
         
         if (input$time_interval == "monthly") {
           out_df <- subset(complete_data, (Month.Year.Loc %in% selected_data()$key & 
                                              as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date"))
+                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date", "Common.Name"))
         }
         
         # Add action buttons for opening the website
