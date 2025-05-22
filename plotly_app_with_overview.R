@@ -22,9 +22,9 @@ library(shinycssloaders)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
-all_data <- fst::read_fst("/Users/laure/Dropbox/Lauren Wick/Plotly App/70conf_2020_to_2024.fst",
+all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_052025.fst",
                           columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
-                                      "Begin.Path", "Location", "Date", "Date.Time"))
+                                      "Begin.Path", "Location", "Date", "Date.Time", "Month", "Week"))
 
 # Set root folder for audio files
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
@@ -36,9 +36,18 @@ ui <- navbarPage(
   selected = "ph_overview",
 
   # Shared sliderInput for confidence
+  div(
+    style = "margin-top: 20px;",
     card(
       height = "185px",
-      card_body(
+      layout_sidebar(
+        sidebar = sidebar(p("BirdNET confidence scores are a 'unitless, numeric expression of BirdNET's confidence in its prediction' scaled from [0,1] and are not probabilities.
+                            Read more about what these values represent in: ", style = "font-size:13px; line-height:1;"),
+                          a("Guidelines for appropriate use of BirdNET scores and other detector outputs (Wood & Kahl, 2023)",
+                            href = "https://connormwood.com/wp-content/uploads/2024/02/wood-kahl-2024-guidelines-for-birdnet-scores.pdf",
+                            style = "font-size:13px; line-height:1;"),
+                          position = "right",
+                          width = "30%"),
         tags$div(
           style = "position: relative; width: 86%; margin: 0 auto;",  # align block
           sliderInput(
@@ -58,16 +67,34 @@ ui <- navbarPage(
           )
         )
       )
+    )
   ),
 
   tabPanel(title = "Prairie Haven Overview", value = "ph_overview",
-           selectInput(inputId = "sel_view",
-                       label = "Pivot Table Selection",
-                       choices = list("Species by Month" = "by_month",
-                                      "Species by Location" = "by_location",
-                                      "Species by Year" = "by_year"),
-                       selected = "by_month"),
-           uiOutput("overview_view") %>% withSpinner()
+           layout_columns(
+             card(
+               card_header("Pivot Table Selection"),
+               card_body(
+                 selectInput(inputId = "sel_view",
+                             label = NULL,
+                             choices = list("Species by Month" = "by_month",
+                                            "Species by Location" = "by_location",
+                                            "Species by Year" = "by_year"),
+                             selected = "by_month")
+               )
+             ),
+             card(
+               card_header("Additional Filters"),
+               card_body(
+                 uiOutput("overview_view") %>% withSpinner(),
+                 height = "300px"
+               )
+             ),
+             col_widths = c(4, 8)
+           ),
+           
+           p("Select a row below to view species specific details"),
+           uiOutput("pivot_dt")
   ),
 
   tabPanel(title = "Species-Specific Location Drilldown",
@@ -96,38 +123,7 @@ ui <- navbarPage(
              })
            ),
 
-           uiOutput("filtered_data_ui"),
-
-           br(),
-
-           card(
-             card_header("Audio Segment Parameters"),
-             card_body(
-               sliderInput(
-                 inputId = "recording_length",
-                 label = "Recording Length (seconds)",
-                 min = 3,
-                 max = 30,
-                 value = 10,
-                 step = 1,
-                 round = TRUE
-               ),
-
-               sliderInput(
-                 inputId = "recording_offset",
-                 label = "Recording Offset (seconds)",
-                 min = 0,
-                 max = 30,
-                 value = 3,
-                 step = 1,
-                 round = TRUE
-               )
-             )
-           ),
-
-           uiOutput("audio_player") %>% withSpinner(),
-           downloadButton("audioDownload", "Download Audio"),
-           plotOutput("spectrogram")),
+           uiOutput("filtered_data_ui")),
 
 
   tabPanel(title = "Species-Specific Overview",
@@ -315,10 +311,16 @@ server <- function(input, output, session) {
     return(df)
   }
 
-  create_pivot_year <- function(df, loc_input = "All", month_sel) {
+  create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel) {
+    if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
+      month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
+                     "Aug", "Sep", "Oct", "Nov", "Dec")
+    }
+    
     df <- df %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
-      filter(lubridate::month(as.Date(Date), label = TRUE) %in% month_sel) %>%
+      filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
+      filter(Month %in% month_sel) %>%
       mutate(Date = as.Date(Date), Year = year(Date)) %>%
       group_by(Common.Name, Species.Code, Year) %>%
       summarize(Count_by_Species = n(), .groups = "drop")
@@ -350,11 +352,16 @@ server <- function(input, output, session) {
   }
 
 
-  create_pivot_location <- function(df, yr_input = "All", month_sel) {
+  create_pivot_location <- function(df, yr_input = "All", month_sel, week_sel) {
+    if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
+      month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    }
+    
     df <- df %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>% 
-      filter(lubridate::month(as.Date(Date), label = TRUE) %in% month_sel) %>%
-      # filter(as.Date(Date) >= date_input[1] & as.Date(Date) <= date_input[2]) %>%
+      filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
+      filter(Month %in% month_sel) %>%
       group_by(Common.Name, Species.Code, Location) %>%
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
@@ -397,24 +404,28 @@ server <- function(input, output, session) {
     req(input$year_sel)
     req(input$loc_sel)
     req(filtered_data())
+
     create_pivot_month(filtered_data(), input$year_sel, input$loc_sel)
   }) %>% bindCache(input$year_sel, input$loc_sel, input$confidence_selection_overview)
   
   debounced_month_sel <- debounce(reactive(input$month_sel), 500)
+  debounced_week_sel <- debounce(reactive(input$week_sel), 500)
   
   species_by_location <- reactive({
     req(input$year_sel)
     req(debounced_month_sel())
+    req(debounced_week_sel())
     req(filtered_data())
-    create_pivot_location(filtered_data(), input$year_sel, debounced_month_sel())
-  }) %>% bindCache(input$year_sel, debounced_month_sel(), input$confidence_selection_overview)
+    create_pivot_location(filtered_data(), input$year_sel, debounced_month_sel(), debounced_week_sel())
+  }) %>% bindCache(input$year_sel, debounced_month_sel(), debounced_week_sel(), input$confidence_selection_overview)
   
   species_by_year <- reactive({
     req(input$loc_sel)
     req(debounced_month_sel())
+    req(debounced_week_sel())
     req(filtered_data())
-    create_pivot_year(filtered_data(), input$loc_sel, debounced_month_sel())
-  }) %>% bindCache(input$loc_sel, debounced_month_sel(), input$confidence_selection_overview)
+    create_pivot_year(filtered_data(), input$loc_sel, debounced_month_sel(), debounced_week_sel())
+  }) %>% bindCache(input$loc_sel, debounced_month_sel(), debounced_week_sel(), input$confidence_selection_overview)
   
   # Table rendering
   output$species_by_month_pivot <- renderDataTable({
@@ -455,28 +466,68 @@ server <- function(input, output, session) {
     
     if (input$sel_view == "by_month") {
       tagList(
-        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
-        DT::dataTableOutput("species_by_month_pivot") %>% withSpinner()
+        layout_columns(
+          selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+          selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
+          col_widths = c(6, 6)
+        )
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
-        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-        selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
-                    multiple = TRUE),
-        DT::dataTableOutput("species_by_location_pivot") %>% withSpinner()
+        layout_columns(
+          selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+          selectInput("month_sel", label = "Month Selection", 
+                      choices = month_choices(), 
+                      selected = month_choices(),
+                      multiple = TRUE),
+          sliderInput("week_sel", label = "Week Selection",
+                      min = 1,
+                      max = 53,
+                      value = c(1, 53),
+                      step = 1),
+          p(em("Note that week selection overrides month selection."), style = "font-size: 12px;"),
+          col_widths = (c(4, 8,
+                          -4, 8,
+                          -4, 8))
+        )
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
-        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
-        selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
-                    multiple = TRUE),
-        DT::dataTableOutput("species_by_year_pivot") %>% withSpinner()
+        layout_columns(
+          selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
+          selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
+                      multiple = TRUE),
+          sliderInput("week_sel", label = "Week Selection",
+                      min = 1,
+                      max = 53,
+                      value = c(1, 53),
+                      step = 1),
+          p(em("Note that week selection overrides month selection."), style = "font-size: 12px;"),
+          col_widths = c(4, 8,
+                         -4, 8,
+                         -4, 8)
+        ),
       )
     }
   }) 
+  
+  output$pivot_dt <- renderUI({
+    req(input$sel_view)
+    
+    if (input$sel_view == "by_month") {
+      return(DT::dataTableOutput("species_by_month_pivot") %>% withSpinner())
+    }
+    
+    else if (input$sel_view == "by_location") {
+      return(DT::dataTableOutput("species_by_location_pivot") %>% withSpinner())
+    }
+    
+    else if (input$sel_view == "by_year") {
+      return(DT::dataTableOutput("species_by_year_pivot") %>% withSpinner())
+    }
+  })
   
   # Observe clicks on the tables
   observeEvent(input$species_by_month_pivot_rows_selected, {
