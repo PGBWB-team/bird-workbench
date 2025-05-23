@@ -102,9 +102,10 @@ ui <- navbarPage(
              ),
              col_widths = c(4, 8)
            ),
-           
-           p("Select a row below to view species specific details"),
-           uiOutput("pivot_dt") %>% withSpinner()
+           card(
+             p(icon("circle-info"), strong("Select a row below to view species specific details")),
+             uiOutput("pivot_dt") %>% withSpinner()
+           )
   ),
 
   tabPanel(title = "Species-Specific Location Drilldown",
@@ -786,28 +787,6 @@ server <- function(input, output, session) {
     paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
   }
   
-  get_week_from_date <- function(date) {
-    date <- as.Date(date, format = "%Y-%m-%d")
-    
-    # Extract year from the given date
-    year <- as.integer(format(date, "%Y"))
-    
-    # Get the first day of the year
-    first_day <- as.Date(paste0(year, "-01-01"))
-    
-    # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
-    
-    # Calculate the difference in days between the given date and the first Sunday
-    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
-    
-    # Determine week number
-    week_number <- (days_since_first_sunday %/% 7) +1
-    
-    return(week_number)
-    
-  }
-  
   # List of locations
   location_list <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")
   
@@ -838,7 +817,6 @@ server <- function(input, output, session) {
             Date = as.Date(Date),
             Year = year(Date),
             Month = month(Date),
-            Week = get_week_from_date(Date),
             Month.Year = paste(Month, Year, sep = ","), 
             Month.Year.Loc = paste(Month, Year, Location, sep = ","),
             Week.Year = paste(Week, Year, sep = ","),
@@ -846,16 +824,28 @@ server <- function(input, output, session) {
           )
         
         # Fill in the gaps when we don't have weeks with data
-        complete_data <- species_data %>%
-          complete(Year = unique(species_data$Year), Week = 1:52, fill = list(Count = 0))
-        complete_data <- complete_data %>%
-          group_by(Year) %>%
-          mutate(YearlyCount = n()) %>%
-          ungroup()
-      
+        # complete_data <- species_data %>%
+        #   complete(Year = unique(species_data$Year), Week = 1:52, fill = list(Count = 0))
+        # complete_data <- complete_data %>%
+        #   group_by(Year) %>%
+        #   mutate(YearlyCount = n()) %>%
+        #   ungroup()
+        # 
+        # count_data_week <- complete_data %>%
+        #   group_by(Week.Year.Loc) %>%
+        #   summarise(Count = n(), .groups = 'drop')
+        # 
+        # complete_data_week <- left_join(complete_data, count_data_week, by = "Week.Year.Loc")
+        # 
         
         # Create the plot
-        p <- ggplot(species_data, aes(x = Week)) +
+        p <- ggplot(species_data, aes(x = Week
+                                      # key = Week.Year.Loc,
+                                      # text = paste(
+                                      #   "Week:", Week,
+                                      #   "<br>Date Range:", get_week_date_range(Year, Week),
+                                      #   "<br>Count:", Count)
+                                      )) +
           geom_freqpoly(binwidth=1,aes(color = as.factor(Year), size = as.factor(Year))) +
           scale_x_continuous(breaks = 1:52, limits = c(1, 52)) +
           labs(title = loc, x = "Week", y = "Frequency") +
@@ -864,7 +854,9 @@ server <- function(input, output, session) {
           theme_minimal()
         
         # Convert to an interactive plotly object and register the click event
-        plotly_object <- ggplotly(p, dynamicTicks = TRUE)
+        plotly_object <- ggplotly(p, dynamicTicks = TRUE
+                                  # = "text"
+                                  )
         
       })
     })
@@ -914,7 +906,6 @@ server <- function(input, output, session) {
             Date = as.Date(Date),
             Year = year(Date),
             Month = month(Date),
-            Week = get_week_from_date(Date),
             Month.Year = paste(Month, Year, sep = ","), 
             Month.Year.Loc = paste(Month, Year, Location, sep = ","),
             Week.Year = paste(Week, Year, sep = ","),
@@ -1107,7 +1098,6 @@ server <- function(input, output, session) {
           Date = as.Date(Date),
           Year = year(Date),
           Month = month(Date),
-          Week = get_week_from_date(Date),
           Month.Year = paste(Month, Year, sep = ","), 
           Month.Year.Loc = paste(Month, Year, Location, sep = ","),
           Week.Year = paste(Week, Year, sep = ","),

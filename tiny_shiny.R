@@ -14,8 +14,10 @@ library(viridisLite)
 #################################################
 
 # Set root folder for audio files
-audio_filepath <- "enter file path for audio files here"
-parent_shiny_url <- "enter path for parent shiny app"
+audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
+
+# parent_shiny_url format: "http://pgbwb.com/"
+parent_shiny_url <- "enter path here"
 
 ##############
 # Start Code #
@@ -93,7 +95,6 @@ server <- function(input, output, session) {
     year <- year(as.Date(unlist(strsplit(basename(file_nm), split = "_"))[2], "%Y%m%d"))
     file_loc <- paste0(audio_filepath, "Bio ", as.character(year), "/From Recorders")
     audio_loc <- file.path(file_loc, file_nm)
-    
     if (is.null(audio_loc) || audio_loc == "" || !file.exists(audio_loc)) {
       return(NULL)
     }
@@ -123,7 +124,7 @@ server <- function(input, output, session) {
   generate_audio_and_spectrogram <- reactive({
     req(values$file_name)
     og_file <- find_audio_file(values$file_name)
-    
+
     output$species_title <- renderUI(
       values$species_name
     )
