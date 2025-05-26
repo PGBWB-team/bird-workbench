@@ -3,6 +3,12 @@
 #  Combines the Birdnet-Analyzer selection.table.txt files in a directory
 #  into a single combined file of results.  
 
+#  This script performs the same function as the --combine_results option 
+#  in the CLI BirdNET-Analyzer but it combines the results of a directory 
+#  rather than the results of a BirdNET-Analyzer run. 
+
+#  Run as part of the Update Archive workflow
+
 #  INIT
 
 # Prerun EDIT - Directory containing the files to process
