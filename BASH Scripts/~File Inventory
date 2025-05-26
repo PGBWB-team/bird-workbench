@@ -1,4 +1,4 @@
-BirdNET_run-file_combinerV3.sh:
+BirdNET_run-file_combinerV3.sh
 
 Combines the Birdnet-Analyzer selection.table.txt files in a directory
 into a single combined file of results.  
@@ -8,3 +8,8 @@ in the CLI BirdNET-Analyzer but it combines the results of a directory
 rather than the results of a BirdNET-Analyzer run. 
 
 Run as part of the Update Archive workflow
+
+
+maintenance_PGBWB_nightly.sh:
+
+This script in the home for nightly maintenance.
