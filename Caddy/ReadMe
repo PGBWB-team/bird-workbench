@@ -1,0 +1,13 @@
+our R UI code is generating public URLs for each page that is displayed.  Caddy is used in conjunction with DNS to make those URLs visible.
+
+Caddy is used as a reverse proxy to map pgbwb.com URLs to running services inside our network.  Much more about this at https://caddyserver.com/.  Chatbots ala ChatGPT are a great help explanining what's going on and getting it set up.
+
+We use DNS to point pgbwb URLs to our network.  Caddy maps what IP address and port those requests should be routed to once they get here.  
+For example: 
+   prod.pgbwb.com might go to IP 192.168.1.222 port 8888, while 
+   test.pgwbw.com might go to IP 192.168.1.222 port 8899.  
+
+We use our local rounter to point those URLs at the internal LAN IP address of our server to make that work *inside* the network.  Caddy uses the URL to determine which port that traffic should use.
+
+The caddyfile is where those mapping rules are maintained.
+
