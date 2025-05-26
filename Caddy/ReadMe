@@ -4,8 +4,9 @@ Caddy is used as a reverse proxy to map pgbwb.com URLs to running services insid
 
 We use DNS to point pgbwb URLs to our network.  Caddy maps what IP address and port those requests should be routed to once they get here.  
 For example: 
-   prod.pgbwb.com might go to IP 192.168.1.222 port 8888, while 
-   test.pgwbw.com might go to IP 192.168.1.222 port 8899.  
+   prod.pgbwb.com might go to IP 192.168.1.222 port 8888 
+   test.pgwbw.com might go to IP 192.168.1.222 port 8899
+   tiny.pgbwb.com might go to IP 192.168.1.222 port 8877
 
 We use our local rounter to point those URLs at the internal LAN IP address of our server to make that work *inside* the network.  Caddy uses the URL to determine which port that traffic should use.
 
