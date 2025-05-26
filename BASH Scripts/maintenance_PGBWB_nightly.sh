@@ -1,6 +1,8 @@
 #!/bin/bash
 
-# PGBEB writes temporary files to this directory when users request audio for an ID
-# this nightly script empties the folder they're written to.
+# This script in the home for nightly maintenance.  
+
+# PGBWB's R UI writes temporary disk files to a directory when users request audio for an ID.
+# This step empties that directory.
 
 rm -rf /Users/mikeoconnor/Documents/BirdWorkbench/BirdWorkbench_R_Scripts/www/*
