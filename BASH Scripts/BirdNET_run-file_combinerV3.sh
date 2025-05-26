@@ -1,8 +1,14 @@
 #!/bin/bash
 
-# EDIT - Directory containing the files to process
+#  Combines the Birdnet-Analyzer selection.table.txt files in a directory
+#  into a single combined file of results.  
+
+#  INIT
+
+# Prerun EDIT - Directory containing the files to process
 input_dir="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025" 
-# EDIT - Output file
+
+# Prerun EDIT - Output file
 output_file="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
 
 # Ensure the output file is empty initially
@@ -10,6 +16,8 @@ output_file="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_fil
 
 # Variable to track if the header line has been written
 header_written=false
+
+#  MAIN
 
 # Loop through each file in the directory
 for file in "$input_dir"/*; do
