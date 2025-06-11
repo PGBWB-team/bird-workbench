@@ -2,6 +2,11 @@
 
 library(lubridate)
 library(fst)
+library(data.table)
+library(DBI)
+library(RSQLite)
+library(dplyr)
+library(fuzzyjoin)
 
 #################################################
 # Set file path variables (Requires User Input) #
@@ -20,7 +25,10 @@ file_2020 <- "C:/Users/laure/Dropbox/Lauren Wick/2020 BirdNET runs//Combined_202
 file_list <- c(file_2024, file_2023, file_2022, file_2021, file_2020)
 
 # Set file path for writing .fst output
-fst_output <- "C:/Users/laure/Dropbox/Prairie HAven/FST Output/fst_output_052025.fst"
+fst_output <- "C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061125_weather.fst"
+
+# File path to SQL weather database
+weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
 
 ################
 # Start script #
@@ -119,8 +127,82 @@ data_70_subset <- lapply(data_70, subset, Location %in% location_list)
 # Combine all dataframes within list into one large data frame
 all_data <- do.call('rbind', data_70_subset)
 
+################
+# WEATHER DATA #
+################
+
+# Connect to SQLite databae
+con <- dbConnect(RSQLite::SQLite(),
+                 weather_path)
+
+# Query for hourly temp and wind
+query <- "
+WITH wind_hourly AS (
+  SELECT 
+    strftime('%Y-%m-%d %H:00:00', datetime(time, 'unixepoch')) AS hour,
+    AVG(value) AS avg_windspeed
+  FROM windSpeed
+  WHERE 
+    time >= strftime('%s', '2020-01-01') AND
+    strftime('%S', datetime(time, 'unixepoch')) != '00'
+  GROUP BY hour
+),
+temp_hourly AS (
+  SELECT 
+    strftime('%Y-%m-%d %H:00:00', datetime(time, 'unixepoch')) AS hour,
+    AVG(value) AS avg_temperature
+  FROM outdoorTemperature
+  WHERE 
+    time >= strftime('%s', '2020-01-01') AND
+    strftime('%S', datetime(time, 'unixepoch')) != '00'
+  GROUP BY hour
+)
+
+SELECT 
+  w.hour,
+  w.avg_windspeed,
+  t.avg_temperature
+FROM wind_hourly w
+LEFT JOIN temp_hourly t ON w.hour = t.hour
+ORDER BY w.hour;
+"
+
+
+hourly_avg <- dbGetQuery(con, query)
+dbDisconnect(con)
+
+#####################################
+# JOIN WEATHER DATA TO OBSERVATIONS #
+#####################################
+
+all_data$Date.Time <- as.POSIXct(all_data$Date.Time, tz = "UTC")
+hourly_avg$hour <- as.POSIXct(hourly_avg$hour, tz = "UTC")
+
+# Add row IDs to preserve rows during join
+all_data$row_id <- seq_len(nrow(all_data))
+
+# Use fuzzy data to join based on time proximity
+joined <- difference_left_join(
+  all_data, hourly_avg,
+  by = c("Date.Time" = "hour"),
+  max_dist = as.difftime(60, units = "mins"),
+  distance_col = "time_diff"
+)
+
+closest_match <- joined %>%
+  group_by(row_id) %>%
+  slice_min(abs(as.numeric(time_diff)), with_ties = FALSE) %>%
+  ungroup()
+
+closest_match <- closest_match %>%
+  select(-row_id, -time_diff, -hour)
+
+#############
+# WRITE FST #
+#############
+
 # Save as fst file to read in the data in the future without needing to process it again. 
-write_fst(all_data, fst_output)
+write_fst(closest_match, fst_output)
 
 ####################
 # HELPER FUNCTIONS #
