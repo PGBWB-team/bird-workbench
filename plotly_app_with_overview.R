@@ -31,6 +31,7 @@ all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_out
                                       "avg_windspeed", "avg_temperature"))
 
 # Set root folder for audio files
+
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"

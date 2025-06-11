@@ -114,13 +114,19 @@ server <- function(input, output, session) {
     return(date_time)
   }
   
+  debounced_recording_length <- debounce(reactive(input$recording_length), 1000)
+  debounced_recording_offset <- debounce(reactive(input$recording_offset), 1000)
   
-  observeEvent(c(input$recording_length, input$recording_offset), {
+  observeEvent({
+    debounced_recording_length()
+    debounced_recording_offset()
+  }, {
+    req(debounced_recording_length(), debounced_recording_offset())
     if (!is.null(values$file_name)) {
       generate_audio_and_spectrogram()
     }
   })
-  
+
   generate_audio_and_spectrogram <- reactive({
     req(values$file_name)
     og_file <- find_audio_file(values$file_name)
@@ -140,8 +146,8 @@ server <- function(input, output, session) {
     )
     
     # Extract recording length and offset parameters from widgets
-    recording_secs <- input$recording_length
-    recording_offset <- input$recording_offset
+    recording_secs <- debounced_recording_length()
+    recording_offset <- debounced_recording_offset()
     
     # Create www/ directory for storing / playing audio
     if (!dir.exists("www")) {
