@@ -25,9 +25,10 @@ library(shinycssloaders)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
-all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_052025.fst",
+all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061125_weather.fst",
                           columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
-                                      "Begin.Path", "Location", "Date", "Date.Time", "Month", "Week"))
+                                      "Begin.Path", "Location", "Date", "Date.Time", "Month", "Week",
+                                      "avg_windspeed", "avg_temperature"))
 
 # Set root folder for audio files
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
@@ -636,7 +637,7 @@ server <- function(input, output, session) {
     
     # Step 3: Add overall metrics
     df_all_cols <- df %>%
-      group_by(Begin.Path, Location, Date, Date.Time) %>%
+      group_by(Begin.Path, Location, Date, Date.Time, avg_temperature, avg_windspeed) %>%
       summarise(
         Number.Observations = n(),
         Number.Unique.Species = n_distinct(Common.Name),
@@ -652,8 +653,8 @@ server <- function(input, output, session) {
         Time > hms(0, 30, 11) ~ "Night"
       )) %>%
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
-      mutate(Year = as.character(year(Date))) %>%
-      mutate(Month = as.character(month(Date, label = TRUE, abbr = FALSE))) %>%
+      mutate(Year = as.character(lubridate::year(Date))) %>%
+      mutate(Month = as.character(lubridate::month(Date, label = TRUE, abbr = FALSE))) %>%
       left_join(top_species_df, by = "Begin.Path") %>%
       rowwise() %>%
       mutate(Play.Audio = {
@@ -669,9 +670,10 @@ server <- function(input, output, session) {
           "No Audio File"
         }
       }) %>%
+      mutate_if(is.numeric, round, 2) %>%
       select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Year, Month, Time, Time.Of.Day, 
-             Mean.Confidence, Median.Confidence, SD.Confidence,
+             Mean.Confidence, Median.Confidence,avg_temperature, avg_windspeed,
              Top.Species.1, Top.Species.2, Top.Species.3)
       # left_join(df_top_birds, by = "Begin.Path")
     
@@ -702,7 +704,8 @@ server <- function(input, output, session) {
               rownames = FALSE,
               colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
                            "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
-                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", "SD Conf" = "SD.Confidence"),
+                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", 
+                           "Wind Speed" = "avg_windspeed", "Temperature" = "avg_temperature"),
               selection = "single")
       
     }) 
@@ -800,7 +803,7 @@ server <- function(input, output, session) {
         cols <- viridis(length(year_choices()), direction = 1, option = "plasma")
         names(cols) <- year_choices()
         
-        line_size <- round(seq(.3, 1, length.out = length(year_choices())), 3)
+        line_size <- round(seq(.3, 1.2, length.out = length(year_choices())), 3)
         names(line_size) <- year_choices()
         
         # Subset by species:
@@ -846,11 +849,11 @@ server <- function(input, output, session) {
                                       #   "<br>Date Range:", get_week_date_range(Year, Week),
                                       #   "<br>Count:", Count)
                                       )) +
-          geom_freqpoly(binwidth=1,aes(color = as.factor(Year), size = as.factor(Year))) +
+          geom_freqpoly(binwidth=1,aes(color = as.factor(Year), linewidth = as.factor(Year))) +
           scale_x_continuous(breaks = 1:52, limits = c(1, 52)) +
           labs(title = loc, x = "Week", y = "Frequency") +
           scale_color_manual(name = "Year", values = cols) +
-          scale_size_manual(name = "Year", values = line_size) +
+          scale_linewidth_manual(name = "Year", values = line_size) +
           theme_minimal()
         
         # Convert to an interactive plotly object and register the click event
@@ -1116,13 +1119,17 @@ server <- function(input, output, session) {
         if (input$time_interval == "weekly") {
           out_df <- subset(complete_data, (Week.Year.Loc %in% selected_data()$key & 
                                              as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date", "Common.Name"))
+                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
+                                                                                          "Confidence", "Location", "Begin.Path", "Species.Code", 
+                                                                                          "Date", "Common.Name", "avg_windspeed", "avg_temperature"))
         }
         
         if (input$time_interval == "monthly") {
           out_df <- subset(complete_data, (Month.Year.Loc %in% selected_data()$key & 
                                              as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", "Confidence", "Location", "Begin.Path", "Species.Code", "Date", "Common.Name"))
+                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
+                                                                                          "Confidence", "Location", "Begin.Path", "Species.Code", 
+                                                                                          "Date", "Common.Name", "avg_windspeed", "avg_temperature"))
         }
         
         # Add action buttons for opening the website
@@ -1140,9 +1147,11 @@ server <- function(input, output, session) {
               "No Audio Available"
             }
           })) %>%
+          mutate(across(c("avg_windspeed", "avg_temperature"), ~ format(round(.x, 3), nsmall = 2))) %>%
           select("Sound.Button", "Confidence", 
                  "Begin.Time..s.", "Date", 
-                 "Begin.Path", "Species.Code") %>%
+                 "Begin.Path", "Species.Code",
+                 "avg_windspeed", "avg_temperature") %>%
           ungroup()
         
         datatable(out_df, 
@@ -1151,7 +1160,8 @@ server <- function(input, output, session) {
                   selection = "none",
                   options = list(
                     fixedHeader = list(header = TRUE)
-                  ))
+                  ),
+                  colnames = c("Wind Speed" = "avg_windspeed", "Temp (F)" = "avg_temperature"))
       } else {
         data.frame()
       }
