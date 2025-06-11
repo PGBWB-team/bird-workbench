@@ -9,7 +9,7 @@ library(dplyr)
 library(fuzzyjoin)
 
 #################################################
-# Set file path variables (Requires User Input) #
+# Set file path variables (REQUIRES USER INPUT) #
 #################################################
 
 # These files contains the BirdNET-Analyzer results for each year and for all confidence levels
@@ -47,7 +47,8 @@ data <- lapply(data, function(df) {
 
 # Subset rows with Confidence >= 0.7000
 # *** Update this variable if you would like to change the confidence cutoff *** #
-data_70 <- lapply(data, subset, as.numeric(Confidence) >= 0.7000)
+# data_70 <- lapply(data, subset, as.numeric(Confidence) >= 0.7000)
+data_70 <- data
 
 # Create function to normalize file name lengths
 normalize_length <- function(x, target_length = 3) {
