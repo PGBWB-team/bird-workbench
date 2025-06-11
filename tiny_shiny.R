@@ -60,8 +60,12 @@ ui <- page_sidebar(
   
   plotOutput("spectrogram") %>% withSpinner(),
   uiOutput("audio_player") %>% withSpinner(),
-  downloadButton("audioDownload", "Download Audio"),
-  uiOutput("parent_url") 
+  
+  layout_columns(
+    downloadButton("audioDownload", "Download Audio"),
+    uiOutput("parent_url"),
+    uiOutput("cornell_link")
+  )
   )
 
 # Server Code:
@@ -194,7 +198,7 @@ server <- function(input, output, session) {
       contentType = "audio/wav"
     )
     
-    routing_text <- "/#species_loc_drilldown?species="
+    routing_text <- "#species_loc_drilldown?species="
     url_full <- paste0(parent_shiny_url, routing_text, values$species_code)
     
     output$parent_url <- renderUI(
@@ -202,7 +206,16 @@ server <- function(input, output, session) {
              url_full,
              '">Go to Species Drilldown</a>')
     ))
+    
+    cornell_page <- paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
+                           values$species_code, "&mediaType=audio&sort=rating_rank_desc")
+    output$cornell_link <- renderUI(
+      HTML(paste0('<a class="btn btn-primary" target="_blank" href="',
+                  cornell_page,
+                  '">Go to Macaulay Library</a>'))
+    )
   })
+  
   
 
 }
