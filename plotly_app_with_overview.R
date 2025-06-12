@@ -25,10 +25,10 @@ library(shinycssloaders)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
-all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061125_weather.fst",
+all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061225_weather.fst",
                           columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
                                       "Begin.Path", "Location", "Date", "Date.Time", "Month", "Week",
-                                      "avg_windspeed", "avg_temperature"))
+                                      "avg_windspeed", "avg_temperature", "Obs.Time"))
 
 # Set root folder for audio files
 
@@ -105,7 +105,7 @@ ui <- navbarPage(
              col_widths = c(4, 8)
            ),
            card(
-             p(icon("circle-info"), strong("Select a row below to view species specific details")),
+             p(icon("circle-info"), strong("Double click a row below to view species specific details")),
              uiOutput("pivot_dt") %>% withSpinner()
            )
   ),
@@ -163,6 +163,18 @@ ui <- navbarPage(
     if (plot) {
       Plotly.restyle(plot, {selectedpoints: [null]});
     }
+  });
+")),
+  
+  tags$script(HTML("
+  $(document).on('dblclick', 'div[data-table-id] table tbody tr', function() {
+    var wrapperDiv = $(this).closest('div[data-table-id]');
+    var tableId = wrapperDiv.attr('data-table-id');
+    var table = wrapperDiv.find('table').DataTable();
+    var rowData = table.row(this).data();
+    var originalIndex = rowData[rowData.length - 1];
+    
+    Shiny.setInputValue(tableId + '_dblclick', originalIndex, {priority: 'event'});
   });
 ")),
 
@@ -530,21 +542,29 @@ server <- function(input, output, session) {
     req(input$sel_view)
     
     if (input$sel_view == "by_month") {
-      return(DT::dataTableOutput("species_by_month_pivot") %>% withSpinner())
-    }
-    
-    else if (input$sel_view == "by_location") {
-      return(DT::dataTableOutput("species_by_location_pivot") %>% withSpinner())
-    }
-    
-    else if (input$sel_view == "by_year") {
-      return(DT::dataTableOutput("species_by_year_pivot") %>% withSpinner())
+      div(
+        id = "species_by_month_pivot_wrapper",
+        `data-table-id` = "species_by_month_pivot",
+        DT::dataTableOutput("species_by_month_pivot") %>% withSpinner()
+      )
+    } else if (input$sel_view == "by_location") {
+      div(
+        id = "species_by_location_pivot_wrapper",
+        `data-table-id` = "species_by_location_pivot",
+        DT::dataTableOutput("species_by_location_pivot") %>% withSpinner()
+      )
+    } else if (input$sel_view == "by_year") {
+      div(
+        id = "species_by_year_pivot_wrapper",
+        `data-table-id` = "species_by_year_pivot",
+        DT::dataTableOutput("species_by_year_pivot") %>% withSpinner()
+      )
     }
   })
   
   # Observe clicks on the tables
-  observeEvent(input$species_by_month_pivot_rows_selected, {
-    selected_row <- input$species_by_month_pivot_rows_selected
+  observeEvent(input$species_by_month_pivot_dblclick, {
+    selected_row <- input$species_by_month_pivot_dblclick
     if (!is.null(selected_row) && length(selected_row) > 0) {
       species_list <- species_by_month()
       if (selected_row[1] <= nrow(species_list)) {
@@ -554,8 +574,8 @@ server <- function(input, output, session) {
     }
   })
   
-  observeEvent(input$species_by_location_pivot_rows_selected, {
-    selected_row <- input$species_by_location_pivot_rows_selected
+  observeEvent(input$species_by_location_pivot_dblclick, {
+    selected_row <- input$species_by_location_pivot_dblclick
     if (!is.null(selected_row) && length(selected_row) > 0) {
       species_list <- species_by_location()
       if (selected_row[1] <= nrow(species_list)) {
@@ -565,8 +585,8 @@ server <- function(input, output, session) {
     }
   })
   
-  observeEvent(input$species_by_year_pivot_rows_selected, {
-    selected_row <- input$species_by_year_pivot_rows_selected
+  observeEvent(input$species_by_year_pivot_dblclick, {
+    selected_row <- input$species_by_year_pivot_dblclick
     if (!is.null(selected_row) && length(selected_row) > 0) {
       species_list <- species_by_year()
       if (selected_row[1] <= nrow(species_list)) {
@@ -1005,13 +1025,35 @@ server <- function(input, output, session) {
   selected_data <- reactiveVal(NULL)
   
   # Create reactive values to store audio and spectrogram
-  spectrogram <- reactiveVal(NULL)
   audio_file_path <- reactiveVal(NULL)
+  
+  observeEvent(input$main_nav, {
+    selected_data(NULL)
+    output$filtered_data_ui <- NULL
+    
+    if (!is.null(audio_file_path())) {
+      if (file.exists(audio_file_path())) {
+        file.remove(audio_file_path())
+      }
+    }
+    
+    if (!is.null(audio_file_path_full())) {
+      if (file.exists(audio_file_path_full())) {
+        file.remove(audio_file_path_full())
+      }
+    }
+    
+    audio_file_path(NULL)
+    audio_file_path_full(NULL)
+    
+    # Clear the plotly selection
+    for (i in seq_along(location_list)) {
+      session$sendCustomMessage("plotly-clearSelection", paste0("frequencyPlot_", i))
+    }
+  })
 
   observeEvent(input$tab_selection, {
     selected_data(NULL)
-    spectrogram(NULL)
-    output$audio_player <- NULL
     output$filtered_data_ui <- NULL
     
     if (!is.null(audio_file_path())) {
@@ -1122,7 +1164,7 @@ server <- function(input, output, session) {
                                              as.numeric(Confidence)>=min_conf & 
                                              as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
                                                                                           "Confidence", "Location", "Begin.Path", "Species.Code", 
-                                                                                          "Date", "Common.Name", "avg_windspeed", "avg_temperature"))
+                                                                                          "Date", "Common.Name", "Obs.Time", "avg_windspeed", "avg_temperature"))
         }
         
         if (input$time_interval == "monthly") {
@@ -1130,7 +1172,7 @@ server <- function(input, output, session) {
                                              as.numeric(Confidence)>=min_conf & 
                                              as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
                                                                                           "Confidence", "Location", "Begin.Path", "Species.Code", 
-                                                                                          "Date", "Common.Name", "avg_windspeed", "avg_temperature"))
+                                                                                          "Date", "Common.Name", "Obs.Time", "avg_windspeed", "avg_temperature"))
         }
         
         # Add action buttons for opening the website
@@ -1150,7 +1192,7 @@ server <- function(input, output, session) {
           })) %>%
           mutate(across(c("avg_windspeed", "avg_temperature"), ~ format(round(.x, 3), nsmall = 2))) %>%
           select("Sound.Button", "Confidence", 
-                 "Begin.Time..s.", "Date", 
+                 "Begin.Time..s.", "Obs.Time", "Date", 
                  "Begin.Path", "Species.Code",
                  "avg_windspeed", "avg_temperature") %>%
           ungroup()
@@ -1160,9 +1202,10 @@ server <- function(input, output, session) {
                   extensions = "FixedHeader",
                   selection = "none",
                   options = list(
-                    fixedHeader = list(header = TRUE)
+                    fixedHeader = list(header = TRUE),
+                    columnDefs = list(list(visible=FALSE, targets= "Begin.Time..s."))
                   ),
-                  colnames = c("Wind Speed" = "avg_windspeed", "Temp (F)" = "avg_temperature"))
+                  colnames = c("Wind Speed (MPH)" = "avg_windspeed", "Temp (F)" = "avg_temperature"))
       } else {
         data.frame()
       }
