@@ -25,7 +25,7 @@ library(shinycssloaders)
 
 # Reading in all data:
 # Second line defines specific columns we want to read, remove unwanted columns to improve loading time
-all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061225_weather.fst",
+all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061825_weather.fst ",
                           columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
                                       "Begin.Path", "Location", "Date", "Date.Time", "Month", "Week",
                                       "avg_windspeed", "avg_temperature", "Obs.Time"))
@@ -35,13 +35,14 @@ all_data <- fst::read_fst("/Users/laure/Dropbox/Prairie Haven/FST Output/fst_out
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- "enter path here"
+tiny_shiny <- "http://127.0.0.1:5824/?"
 
 ##############
 # Start Code #
 ##############
 
 ui <- navbarPage(
+  useShinyjs(),
   theme = bs_theme(version = 5),
   id = "main_nav",
   title = "Pretty Good Bird Workbench",
@@ -105,8 +106,9 @@ ui <- navbarPage(
              col_widths = c(4, 8)
            ),
            card(
-             p(icon("circle-info"), strong("Double click a row below to view species specific details")),
-             uiOutput("pivot_dt") %>% withSpinner()
+             actionButton(inputId = "go", label = "Generate Table",
+                          width = "200px"),
+             uiOutput("pivot_dt") 
            )
   ),
 
@@ -196,7 +198,14 @@ ui <- navbarPage(
     }
 
   "))
-  )
+  ),
+  
+  tags$style(HTML("
+  .lightblue {
+    background-color: #3a5d9c !important;
+    color: white !important;
+  }
+"))
 
 
   )
@@ -208,6 +217,9 @@ server <- function(input, output, session) {
   #################
   ## URL Routing ##
   #################
+  # Disable table button on start
+  shinyjs::addClass("go", "lightblue")
+  
   # Reactive value to store the selected species code
   species_click <- reactiveVal("acafly") # Default species code
   
@@ -410,58 +422,101 @@ server <- function(input, output, session) {
     return(data)
   } 
   
-  # Confidence default
   default_confidence <- c(0.7, 1)
+  filtered_data <- reactiveVal(NULL)
   
-  # Reactive filtered data
-  filtered_data <- reactiveVal(confidence_filter(all_data, default_confidence))
-
+  # Run default filtering on app load
+  observeEvent(all_data, {
+    filtered_data(confidence_filter(all_data, default_confidence))
+  }, once = TRUE)
+  
+  
+  debounced_conf <- debounce(reactive(input$confidence_selection_overview), 2000)
+  
+  slider_touched <- reactiveVal(FALSE)
+  pivot_ready <- reactiveVal(TRUE) 
+  
+  # Disable the generate table button when confidence value changes
+  observeEvent(input$confidence_selection_overview, {
+    slider_touched(TRUE)
+    shinyjs::disable("go")
+  }, ignoreInit = TRUE)
+  
+  # Filter data based on happiness slider
   observe({
     req(all_data)
-    req(input$confidence_selection_overview)
-    new_data <- confidence_filter(all_data, input$confidence_selection_overview)
+    req(slider_touched() == TRUE)
+    req(debounced_conf())
+    
+    new_data <- confidence_filter(all_data, debounced_conf())
     filtered_data(new_data)
+    
+    # Enable generate table button after filtering
+    shinyjs::enable("go")
+    shinyjs::addClass("go", "lightblue")
+    shinyjs::html("go", "Regenerate Table")
   })
   
-  
-  # Reactives that generate pivots on demand
-  species_by_month <- reactive({
-    req(input$year_sel)
-    req(input$loc_sel)
-    req(filtered_data())
+  observeEvent(input$sel_view, {
+    pivot_ready(FALSE)
+    shinyjs::enable("go")
+    shinyjs::addClass("go", "lightblue")
+    shinyjs::html("go", "Generate Table")
+  })
 
-    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel)
-  }) %>% bindCache(input$year_sel, input$loc_sel, input$confidence_selection_overview)
+  observeEvent({
+    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel)
+    }, {
+    shinyjs::enable("go")
+    shinyjs::addClass("go", "lightblue")
+  })
+
+  observeEvent(input$go, {
+    shinyjs::disable("go")
+    shinyjs::removeClass("go", "lightblue")
+    shinyjs::html("go", "Regenerate Table")
+    pivot_ready(TRUE)
+  })
   
-  debounced_month_sel <- debounce(reactive(input$month_sel), 500)
-  debounced_week_sel <- debounce(reactive(input$week_sel), 500)
-  
-  species_by_location <- reactive({
+  species_by_month <- eventReactive(input$go, {
     req(input$year_sel)
-    req(debounced_month_sel())
-    req(debounced_week_sel())
-    req(filtered_data())
-    create_pivot_location(filtered_data(), input$year_sel, debounced_month_sel(), debounced_week_sel())
-  }) %>% bindCache(input$year_sel, debounced_month_sel(), debounced_week_sel(), input$confidence_selection_overview)
-  
-  species_by_year <- reactive({
     req(input$loc_sel)
-    req(debounced_month_sel())
-    req(debounced_week_sel())
     req(filtered_data())
-    create_pivot_year(filtered_data(), input$loc_sel, debounced_month_sel(), debounced_week_sel())
-  }) %>% bindCache(input$loc_sel, debounced_month_sel(), debounced_week_sel(), input$confidence_selection_overview)
+    
+    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel)
+  })
+  
+  species_by_location <- eventReactive(input$go, {
+    req(input$year_sel)
+    req(input$month_sel)
+    req(input$week_sel)
+    req(filtered_data())
+    
+    create_pivot_location(filtered_data(), input$year_sel, input$month_sel, input$week_sel)
+  })
+  
+  species_by_year <- eventReactive(input$go, {
+    req(input$loc_sel)
+    req(input$month_sel)
+    req(input$week_sel)
+    req(filtered_data())
+    
+    create_pivot_year(filtered_data(), input$loc_sel, input$month_sel, input$week_sel)
+  })
   
   # Table rendering
   output$species_by_month_pivot <- renderDataTable({
+    req(pivot_ready())
     create_table_pivot(species_by_month())
   })
   
   output$species_by_location_pivot <- renderDataTable({
+    req(pivot_ready())
     create_table_pivot(species_by_location())
   })
   
   output$species_by_year_pivot <- renderDataTable({
+    req(pivot_ready())
     create_table_pivot(species_by_year())
   })
   
@@ -540,26 +595,29 @@ server <- function(input, output, session) {
   
   output$pivot_dt <- renderUI({
     req(input$sel_view)
-    
-    if (input$sel_view == "by_month") {
-      div(
-        id = "species_by_month_pivot_wrapper",
-        `data-table-id` = "species_by_month_pivot",
-        DT::dataTableOutput("species_by_month_pivot") %>% withSpinner()
-      )
-    } else if (input$sel_view == "by_location") {
-      div(
-        id = "species_by_location_pivot_wrapper",
-        `data-table-id` = "species_by_location_pivot",
-        DT::dataTableOutput("species_by_location_pivot") %>% withSpinner()
-      )
-    } else if (input$sel_view == "by_year") {
-      div(
-        id = "species_by_year_pivot_wrapper",
-        `data-table-id` = "species_by_year_pivot",
-        DT::dataTableOutput("species_by_year_pivot") %>% withSpinner()
-      )
-    }
+    req(pivot_ready() == TRUE)
+    list(
+      p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+      if (input$sel_view == "by_month") {
+        div(
+          id = "species_by_month_pivot_wrapper",
+          `data-table-id` = "species_by_month_pivot",
+          DT::dataTableOutput("species_by_month_pivot") 
+        )
+      } else if (input$sel_view == "by_location") {
+        div(
+          id = "species_by_location_pivot_wrapper",
+          `data-table-id` = "species_by_location_pivot",
+          DT::dataTableOutput("species_by_location_pivot") 
+        )
+      } else if (input$sel_view == "by_year") {
+        div(
+          id = "species_by_year_pivot_wrapper",
+          `data-table-id` = "species_by_year_pivot",
+          DT::dataTableOutput("species_by_year_pivot") 
+        )
+      }
+    )
   })
   
   # Observe clicks on the tables
@@ -913,8 +971,8 @@ server <- function(input, output, session) {
         cols <- viridis(length(year_choices()), direction = 1, option = "plasma")
         names(cols) <- year_choices()
         
-        min_conf <- input$confidence_selection_overview[1]
-        max_conf <- input$confidence_selection_overview[2]
+        min_conf <- debounced_conf()[1]
+        max_conf <- debounced_conf()[2]
         
         # Subset by species:
         species_data <- subset(filtered_data(), Species.Code==species_click() & Location == loc)
@@ -1132,8 +1190,8 @@ server <- function(input, output, session) {
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDataTable({
       
-      min_conf <- input$confidence_selection_overview[1]
-      max_conf <- input$confidence_selection_overview[2]
+      min_conf <- debounced_conf()[1]
+      max_conf <- debounced_conf()[2]
       
       # Subset by species:
       species_data <- subset(filtered_data(), Species.Code==species_click())
