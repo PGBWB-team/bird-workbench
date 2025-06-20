@@ -58,19 +58,19 @@ ui <- page_sidebar(
     width = 370
   ),
   
-  card(
-    style = "height: 70vh; display: flex; flex-direction: column;",
-    card_header("Spectrogram"),
-    div(
-      style = "flex-grow: 1;",
-      plotOutput("spectrogram", height = "500px") %>% withSpinner()
-    )
-  ),
+  # card(
+  #   style = "height: 70vh; display: flex; flex-direction: column;",
+  #   card_header("Spectrogram"),
+  #   div(
+  #     style = "flex-grow: 1;",
+  #     plotOutput("spectrogram", height = "500px") %>% withSpinner()
+  #   )
+  # ),
   
-
-  # plotOutput("spectrogram") %>% withSpinner(),
-  uiOutput("audio_player") %>% withSpinner(),
-  
+# 
+#   # plotOutput("spectrogram") %>% withSpinner(),
+#   uiOutput("audio_player") %>% withSpinner(),
+#   
   uiOutput("scrolling_spectro") %>% withSpinner(),
   
   layout_columns(
@@ -191,18 +191,18 @@ server <- function(input, output, session) {
     
     av_spectro_vid <- av_spectrogram_video(output_wav,
                                            output = dest_vid_path,
-                                           width = 800, 
-                                           height = 400, 
+                                           width = 1200, 
+                                           height = 550, 
                                            res = 72,
                                            framerate = 20)
     
-    # Generate audio tag
-    output$audio_player <- renderUI({
-      tags$audio(src = audio_src,
-                 type = "audio/wav",
-                 controls = NA,
-                 autoplay = NA)
-    })
+    # # Generate audio tag
+    # output$audio_player <- renderUI({
+    #   tags$audio(src = audio_src,
+    #              type = "audio/wav",
+    #              controls = NA,
+    #              autoplay = NA)
+    # })
     
     output$scrolling_spectro <- renderUI({
       tags$video(src = vid_src,
@@ -219,7 +219,7 @@ server <- function(input, output, session) {
       scale_fill_gradientn(colours = viridis(256, option = "B"),
                            limits = c(-90, 0))
     
-    output$spectrogram <- renderPlot(v)
+    # output$spectrogram <- renderPlot(v)
     
     
     
