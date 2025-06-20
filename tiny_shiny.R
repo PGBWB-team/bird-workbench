@@ -17,7 +17,7 @@ library(viridisLite)
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # parent_shiny_url format: "http://pgbwb.com/"
-parent_shiny_url <- "enter path here"
+parent_shiny_url <- "http://127.0.0.1:5865/"
 
 ##############
 # Start Code #
@@ -58,8 +58,20 @@ ui <- page_sidebar(
     width = 370
   ),
   
-  plotOutput("spectrogram") %>% withSpinner(),
+  card(
+    style = "height: 70vh; display: flex; flex-direction: column;",
+    card_header("Spectrogram"),
+    div(
+      style = "flex-grow: 1;",
+      plotOutput("spectrogram", height = "500px") %>% withSpinner()
+    )
+  ),
+  
+
+  # plotOutput("spectrogram") %>% withSpinner(),
   uiOutput("audio_player") %>% withSpinner(),
+  
+  uiOutput("scrolling_spectro") %>% withSpinner(),
   
   layout_columns(
     downloadButton("audioDownload", "Download Audio"),
@@ -75,6 +87,8 @@ server <- function(input, output, session) {
     species_code = NULL,
     conf = NULL,
     loc = NULL,
+    temp = NULL,
+    wind = NULL,
     file_name = NULL,
     begin_time = NULL
   )
@@ -86,6 +100,8 @@ server <- function(input, output, session) {
     values$species_code <- query[["species_code"]]
     values$conf <- query[["conf"]]
     values$loc <- query[["loc"]]
+    values$temp <- query[["temp"]]
+    values$wind <- query[["wind"]]
     values$file_name <- query[["file_name"]]
     values$begin_time <- query[["begin_time"]]
   })
@@ -144,6 +160,8 @@ server <- function(input, output, session) {
         div(HTML("<strong>Confidence:</strong> "), values$conf),
         div(HTML("<strong>Location:</strong> "), values$loc),
         div(HTML("<strong>Date Time:</strong> "), get_date_time(values$file_name)),
+        div(HTML("<strong>File Avg Temp:</strong> "), values$temp),
+        div(HTML("<strong>File Avg Windspeed:</strong> "), values$wind),
         div(HTML("<strong>File Name:</strong> "), values$file_name)
       )
       
@@ -162,11 +180,21 @@ server <- function(input, output, session) {
     audio_src <- paste0(sub("\\.wav$", "", basename(values$file_name)), "_", values$begin_time, "s.wav")
     dest_path <- file.path("www", audio_src)
     
+    vid_src <- paste0(sub("\\.wav$", "", basename(values$file_name)), "_", values$begin_time, "s.mp4")
+    dest_vid_path <- file.path("www", vid_src)
+    
     # Stream audio clip and rewrite
     output_wav <- av_audio_convert(audio = og_file,
                                    output = dest_path,
                                    start_time = as.numeric(values$begin_time) - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
+    
+    av_spectro_vid <- av_spectrogram_video(output_wav,
+                                           output = dest_vid_path,
+                                           width = 800, 
+                                           height = 400, 
+                                           res = 72,
+                                           framerate = 20)
     
     # Generate audio tag
     output$audio_player <- renderUI({
@@ -174,6 +202,13 @@ server <- function(input, output, session) {
                  type = "audio/wav",
                  controls = NA,
                  autoplay = NA)
+    })
+    
+    output$scrolling_spectro <- renderUI({
+      tags$video(src = vid_src,
+                 type = "video/mp4", 
+                 autoplay = NA,
+                 controls = NA)
     })
     
     audio_wav <- tuneR::readWave(output_wav)
@@ -185,6 +220,8 @@ server <- function(input, output, session) {
                            limits = c(-90, 0))
     
     output$spectrogram <- renderPlot(v)
+    
+    
     
     output$audioDownload <- downloadHandler(
       filename = function() {

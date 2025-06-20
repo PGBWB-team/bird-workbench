@@ -35,7 +35,7 @@ all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_o
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- "http://127.0.0.1:5824/?"
+tiny_shiny <- "http://127.0.0.1:3131/?"
 
 ##############
 # Start Code #
@@ -1264,6 +1264,8 @@ server <- function(input, output, session) {
       species_code <- row[["Species.Code"]]
       conf <- row[["Confidence"]]
       loc <- row[["Location"]]
+      temp <- paste(round(row[["avg_temperature"]], 3), "°F")
+      wind <- paste(round(row[["avg_windspeed"]], 3), "MPH")
       
       # Encode for URL
       species_name <- URLencode(species_name)
@@ -1276,6 +1278,8 @@ server <- function(input, output, session) {
         "&species_code=", species_code,
         "&conf=", conf,
         "&loc=", loc,
+        "&temp=", temp,
+        "&wind=", wind,
         "&file_name=", file_name,
         "&begin_time=", begin_time
       )
