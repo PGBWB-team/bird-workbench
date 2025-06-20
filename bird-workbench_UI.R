@@ -92,7 +92,8 @@ ui <- navbarPage(
                              label = NULL,
                              choices = list("Species by Month" = "by_month",
                                             "Species by Location" = "by_location",
-                                            "Species by Year" = "by_year"),
+                                            "Species by Year" = "by_year",
+                                            "Species by Week" = "by_week"),
                              selected = "by_month")
                )
              ),
@@ -105,11 +106,11 @@ ui <- navbarPage(
              ),
              col_widths = c(4, 8)
            ),
-           card(
-             actionButton(inputId = "go", label = "Generate Table",
-                          width = "200px"),
-             uiOutput("pivot_dt") 
-           )
+           
+           actionButton(inputId = "go", label = "Generate Table",
+                        width = "200px"),
+           uiOutput("pivot_dt") 
+
   ),
 
   tabPanel(title = "Species-Specific Location Drilldown",
@@ -347,6 +348,45 @@ server <- function(input, output, session) {
     df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
     return(df)
   }
+  
+  create_pivot_week <- function(df, yr_input = "All", loc_input = "All", week_sel, time_input = "All") {
+    df <- df %>%
+      filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
+      filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
+      filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
+      mutate(Time = as_hms(Date.Time)) %>%
+      mutate(Time.Of.Day = case_when(
+        Time < hms(0, 30, 11) ~ "Morning",
+        Time == hms(0, 30, 11) ~ "Afternoon",
+        Time > hms(0, 30, 11) ~ "Night"
+      )) %>%
+      filter(if (time_input != "All") Time.Of.Day == time_input else TRUE) %>%
+      group_by(Common.Name, Species.Code, Week) %>%
+      summarize(Count_by_Species = n(), .groups = "drop") 
+    
+    # Capture and sort year columns before pivoting
+    week_cols <- sort(unique(df$Week))
+    
+    df <- df %>%
+      pivot_wider(names_from = Week, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
+      mutate(Total.Count = rowSums(select(., all_of(as.character(week_cols))), na.rm = TRUE)) %>%
+      select(Common.Name, Species.Code, all_of(as.character(week_cols)), Total.Count)
+    
+    # Add summary row at top
+    num_birds <- nrow(df[df$Common.Name != "nocall",])
+    summary_row <- df %>%
+      summarise(
+        Common.Name = paste(num_birds, "Unique Species"),
+        Species.Code = "",
+        Total.Count = sum(df$Total.Count),
+        across(all_of(as.character(week_cols)), sum)
+      )
+    
+    df <- bind_rows(summary_row, df) %>%
+      select(Common.Name, Species.Code, all_of(as.character(week_cols)), Total.Count)
+    
+    return(df)
+  }
 
   create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel) {
     if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
@@ -354,6 +394,10 @@ server <- function(input, output, session) {
                      "Aug", "Sep", "Oct", "Nov", "Dec")
     }
     
+    else if (identical(as.integer(week_sel), as.integer(c(1,53))) & is.null(month_sel)) {
+      month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    }
     df <- df %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
@@ -390,7 +434,12 @@ server <- function(input, output, session) {
 
 
   create_pivot_location <- function(df, yr_input = "All", month_sel, week_sel) {
+    
     if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
+      month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    }
+    else if (identical(as.integer(week_sel), as.integer(c(1,53))) & is.null(month_sel)) {
       month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     }
@@ -465,7 +514,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent({
-    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel)
+    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel, input$time_sel)
     }, {
     shinyjs::enable("go")
     shinyjs::addClass("go", "lightblue")
@@ -488,7 +537,6 @@ server <- function(input, output, session) {
   
   species_by_location <- eventReactive(input$go, {
     req(input$year_sel)
-    req(input$month_sel)
     req(input$week_sel)
     req(filtered_data())
     
@@ -497,11 +545,20 @@ server <- function(input, output, session) {
   
   species_by_year <- eventReactive(input$go, {
     req(input$loc_sel)
-    req(input$month_sel)
     req(input$week_sel)
     req(filtered_data())
     
     create_pivot_year(filtered_data(), input$loc_sel, input$month_sel, input$week_sel)
+  })
+  
+  species_by_week <- eventReactive(input$go, {
+    req(input$loc_sel)
+    req(input$week_sel)
+    req(input$year_sel)
+    req(input$time_sel)
+    req(filtered_data())
+    
+    create_pivot_week(filtered_data(), input$year_sel,input$loc_sel, input$week_sel, input$time_sel)
   })
   
   # Table rendering
@@ -518,6 +575,11 @@ server <- function(input, output, session) {
   output$species_by_year_pivot <- renderDataTable({
     req(pivot_ready())
     create_table_pivot(species_by_year())
+  })
+  
+  output$species_by_week_pivot <- renderDataTable({
+    req(pivot_ready())
+    create_table_pivot(species_by_week())
   })
   
 
@@ -590,6 +652,23 @@ server <- function(input, output, session) {
                          -4, 8)
         ),
       )
+    } else if (input$sel_view == "by_week") {
+      tagList(
+        layout_columns(
+          selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
+          selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+          selectInput("time_sel", label = "Time Selection", 
+                      choices = c("Morning", "Afternoon", "Night", "All"), 
+                      selected = "All"),
+          sliderInput("week_sel", label = "Week Selection",
+                      min = 1,
+                      max = 53,
+                      value = c(1, 53),
+                      step = 1),
+          col_widths = c(4, 4, 4, 
+                         12)
+        )
+      )
     }
   }) 
   
@@ -597,6 +676,7 @@ server <- function(input, output, session) {
     req(input$sel_view)
     req(pivot_ready() == TRUE)
     list(
+      p(),
       p(icon("circle-info"), strong("Double click a row below to view species specific details")),
       if (input$sel_view == "by_month") {
         div(
@@ -615,6 +695,12 @@ server <- function(input, output, session) {
           id = "species_by_year_pivot_wrapper",
           `data-table-id` = "species_by_year_pivot",
           DT::dataTableOutput("species_by_year_pivot") 
+        )
+      } else if (input$sel_view == "by_week") {
+        div(
+          id = "species_by_week_pivot_wrapper",
+          `data-table-id` = "species_by_week_pivot",
+          DT::dataTableOutput("species_by_week_pivot")
         )
       }
     )
@@ -649,6 +735,17 @@ server <- function(input, output, session) {
       species_list <- species_by_year()
       if (selected_row[1] <= nrow(species_list)) {
         species_click(species_list$Species.Code[selected_row[1]])  
+        updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
+      }
+    }
+  })
+  
+  observeEvent(input$species_by_week_pivot_dblclick, {
+    selected_row <- input$species_by_week_pivot_dblclick
+    if (!is.null(selected_row) && length(selected_row) > 0) {
+      species_list <- species_by_week()
+      if (selected_row[1] <= nrow(species_list)) {
+        species_click(species_list$Species.Code[selected_row[1]])
         updateNavbarPage(session, "main_nav", selected = "species_loc_drilldown")
       }
     }
@@ -754,8 +851,7 @@ server <- function(input, output, session) {
              Location, Date, Year, Month, Time, Time.Of.Day, 
              Mean.Confidence, Median.Confidence,avg_temperature, avg_windspeed,
              Top.Species.1, Top.Species.2, Top.Species.3)
-      # left_join(df_top_birds, by = "Begin.Path")
-    
+
     return(df_all_cols)
   }
   
@@ -1248,7 +1344,7 @@ server <- function(input, output, session) {
               "No Audio Available"
             }
           })) %>%
-          mutate(across(c("avg_windspeed", "avg_temperature"), ~ format(round(.x, 3), nsmall = 2))) %>%
+          mutate(across(c("avg_windspeed", "avg_temperature"), ~ round(.x, 3))) %>%
           select("Sound.Button", "Confidence", 
                  "Begin.Time..s.", "Obs.Time", "Date", 
                  "Begin.Path", "Species.Code",
@@ -1259,6 +1355,7 @@ server <- function(input, output, session) {
                   escape = FALSE,
                   extensions = "FixedHeader",
                   selection = "none",
+                  filter = "top",
                   options = list(
                     fixedHeader = list(header = TRUE),
                     columnDefs = list(list(visible=FALSE, targets= "Begin.Time..s."))
