@@ -35,7 +35,7 @@ all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_o
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- "http://127.0.0.1:3131/?"
+tiny_shiny <- "http://127.0.0.1:6024/?"
 
 ##############
 # Start Code #
@@ -203,7 +203,7 @@ ui <- navbarPage(
   
   tags$style(HTML("
   .lightblue {
-    background-color: #3a5d9c !important;
+    background-color: #007bc2 !important;
     color: white !important;
   }
 "))
@@ -285,12 +285,33 @@ server <- function(input, output, session) {
   ## Application Build: Prairie Haven Overview ##
   ###############################################
   
+  # Function to get week from date
+  get_week_from_date <- function(date) {
+    if (anyNA(date)) return(NA_integer_)
+    
+    # Extract year from the given date
+    year <- as.integer(format(date, "%Y"))
+    
+    # Get the first day of the year
+    first_day <- as.Date(paste0(year, "-01-01"))
+    
+    # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
+    
+    # Calculate the difference in days between the given date and the first Sunday
+    days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
+    
+    # Determine week number
+    week_number <- (days_since_first_sunday %/% 7) +1
+    
+    return(week_number)
+  }
 
-  create_table_pivot <- function(data) {
+  create_table_pivot <- function(data, current_week = NULL) {
     # Add a helper column with row index for DT styling
     data$row_index <- seq_len(nrow(data))
     
-    datatable(
+    dt <- datatable(
       data,
       escape = FALSE,
       extensions = c("Buttons", "FixedHeader"),
@@ -314,7 +335,18 @@ server <- function(input, output, session) {
       formatStyle(
         "Total.Count",
         fontStyle = "italic"
-      )
+      ) 
+    
+    if (!is.null(current_week) && current_week %in% colnames(data)) {
+      dt <- dt %>%
+        formatStyle(
+          current_week,
+          fontWeight = "bold",
+          color = "#007bc2"
+        )
+    } 
+    
+    return(dt)
   }
   
   create_pivot_month <- function(df, yr_input = "All", loc_input = "All") {
@@ -344,7 +376,7 @@ server <- function(input, output, session) {
       }
     }
     
-    df <- df %>% select(Common.Name, Species.Code, all_of(month_order), Total.Count)
+    df <- df %>% select(Common.Name, Total.Count, Species.Code, all_of(month_order))
     df <- rbind(df[nrow(df),], df[1:(nrow(df)-1),])
     return(df)
   }
@@ -366,11 +398,17 @@ server <- function(input, output, session) {
     
     # Capture and sort year columns before pivoting
     week_cols <- sort(unique(df$Week))
-    
+    names(week_cols) <- get_week_date_range(lubridate::year(Sys.time()), week_cols, format = TRUE)
+
     df <- df %>%
       pivot_wider(names_from = Week, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., all_of(as.character(week_cols))), na.rm = TRUE)) %>%
       select(Common.Name, Species.Code, all_of(as.character(week_cols)), Total.Count)
+    
+    # Rename columns to use date ranges instead of week numbers
+    old_names <- as.character(week_cols)
+    new_names <- names(week_cols)
+    names(df)[names(df) %in% old_names] <- new_names[match(names(df)[names(df) %in% old_names], old_names)]
     
     # Add summary row at top
     num_birds <- nrow(df[df$Common.Name != "nocall",])
@@ -379,13 +417,14 @@ server <- function(input, output, session) {
         Common.Name = paste(num_birds, "Unique Species"),
         Species.Code = "",
         Total.Count = sum(df$Total.Count),
-        across(all_of(as.character(week_cols)), sum)
+        across(all_of(new_names), sum)  # Use new_names here
       )
     
     df <- bind_rows(summary_row, df) %>%
-      select(Common.Name, Species.Code, all_of(as.character(week_cols)), Total.Count)
+      select(Common.Name, Total.Count, Species.Code, all_of(new_names))  # Use new_names here too
     
     return(df)
+    
   }
 
   create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel) {
@@ -427,7 +466,7 @@ server <- function(input, output, session) {
       )
     
     df <- bind_rows(summary_row, df) %>%
-      select(Common.Name, Species.Code, all_of(as.character(year_cols)), Total.Count)
+      select(Common.Name, Total.Count, Species.Code, all_of(as.character(year_cols)))
     
     return(df)
   }
@@ -452,7 +491,7 @@ server <- function(input, output, session) {
       summarize(Count_by_Species = n(), .groups = "drop") %>%
       pivot_wider(names_from = Location, values_from = Count_by_Species, values_fill = list(Count_by_Species = 0)) %>%
       mutate(Total.Count = rowSums(select(., -c(Common.Name, Species.Code)), na.rm = TRUE)) %>%
-      select(Common.Name, everything(), Total.Count)
+      select(Common.Name, Total.Count, everything())
     
     num_birds <- nrow(df[df$Common.Name != "nocall",])    
     df <- df %>%
@@ -579,7 +618,9 @@ server <- function(input, output, session) {
   
   output$species_by_week_pivot <- renderDataTable({
     req(pivot_ready())
-    create_table_pivot(species_by_week())
+    create_table_pivot(species_by_week(), current_week = get_week_date_range(year = lubridate::year(Sys.time()),
+                                                                             week = get_week_from_date(Sys.time()),
+                                                                             format = TRUE))
   })
   
 
@@ -667,7 +708,9 @@ server <- function(input, output, session) {
                       step = 1),
           col_widths = c(4, 4, 4, 
                          12)
-        )
+        ),
+        p(em(tagList("This week is ", strong("Week ", style = "font-size: 12px; color: #007bc2;"), 
+                     strong(get_week_from_date(Sys.time()), style = "font-size: 12px; color: #007bc2;"))), style = "font-size: 12px;")
       )
     }
   }) 
@@ -784,7 +827,7 @@ server <- function(input, output, session) {
       summarise(Species.Count = n(), .groups = "drop") %>%
       arrange(Begin.Path, desc(Species.Count)) %>%
       group_by(Begin.Path) %>%
-      slice_head(n = 3) %>%
+      slice_head(n = 1) %>%
       mutate(Rank = paste0("Top.Species.", row_number())) %>%
       select(Begin.Path, Rank, Common.Name) %>%
       pivot_wider(
@@ -845,12 +888,37 @@ server <- function(input, output, session) {
         } else {
           "No Audio File"
         }
-      }) %>%
-      mutate_if(is.numeric, round, 2) %>%
+      }) 
+
+    df_all_cols$Number.Observations.Pct = percent_rank(df_all_cols$Number.Observations)
+    df_all_cols$Windspeed.Pct = 1 - percent_rank(df_all_cols$avg_windspeed)
+    df_all_cols$Confidence.Pct = percent_rank(df_all_cols$Mean.Confidence)
+    
+    df_all_cols <- df_all_cols %>%
+      mutate(Score = case_when(
+        is.na(avg_windspeed) ~ (Number.Observations.Pct + Confidence.Pct + 0.5) / 3,
+        !is.null(avg_windspeed) ~ (Number.Observations.Pct + Windspeed.Pct + Confidence.Pct) / 3
+      )) %>%
+      mutate_if(is.numeric, round, 3) 
+      
+    df_all_cols <- df_all_cols %>%
+      mutate(Score_Pct = percent_rank(Score),
+             Score_Color = case_when(
+               Score >= 0.9 ~ "#007bc2",
+               Score >= 0.8 & Score < 0.9 ~ "#358aca",  
+               Score >= 0.7 & Score < 0.8 ~ "#5399d1",  
+               Score >= 0.6 & Score < 0.7 ~ "#6da7d8",  
+               Score >= 0.5 & Score < 0.6 ~ "#86b6df", 
+               Score >= 0.4 & Score < 0.5 ~ "#9ec5e6",
+               Score >= 0.3 & Score < 0.4 ~ "#b6d3ed",
+               Score >= 0.2 & Score < 0.3 ~ "#cee2f3",
+               Score >= 0.1 & Score < 0.2 ~ "#e7f0f9",
+               Score < 0.1 ~ "#ffffff"               
+             )) %>%
       select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Year, Month, Time, Time.Of.Day, 
-             Mean.Confidence, Median.Confidence,avg_temperature, avg_windspeed,
-             Top.Species.1, Top.Species.2, Top.Species.3)
+             Mean.Confidence, avg_temperature, avg_windspeed,
+             Top.Species.1, Score, Score_Color)
 
     return(df_all_cols)
   }
@@ -863,25 +931,33 @@ server <- function(input, output, session) {
   
   # Render the pivot table
   output$file_list_pivot <- renderDataTable(
-    # server = FALSE, 
     {
     datatable(file_list(),
               escape = FALSE,
               extensions = c("Buttons", "FixedHeader"),
               filter = "top",
+              class = "row-border",
               options = list(
-                dom = "Bfrtip",
+                dom = "Blfrtip",
                 ordering = TRUE,
                 buttons = c("csv", "copy"),
                 pageLength = 100,
-                fixedHeader = list(header = TRUE)
+                lengthMenu = list(c(25, 50, 100),
+                                  c('25', '50', '100')),
+                paging = TRUE,
+                fixedHeader = list(header = TRUE),
+                columnDefs = list(list(visible=FALSE, targets= "Score_Color"))
               ),
               rownames = FALSE,
               colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
                            "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
-                           "Mean Conf" = "Mean.Confidence", "Median Conf" = "Median.Confidence", 
+                           "Mean Conf" = "Mean.Confidence", 
                            "Wind Speed" = "avg_windspeed", "Temperature" = "avg_temperature"),
-              selection = "single")
+              selection = "single") %>%
+        formatStyle("Score",
+                    valueColumns = "Score_Color",
+                    target = "cell",
+                    backgroundColor = JS("value")) 
       
     }) 
   
@@ -928,7 +1004,8 @@ server <- function(input, output, session) {
     dest_path <- file.path("www", audio_src)
     
     output_wav <- av_audio_convert(audio = selected_audio_full$file, 
-                                   output = dest_path)
+                                   output = dest_path,
+                                   total_time = 15)
     
     audio_file_path_full(dest_path)
     
@@ -948,7 +1025,7 @@ server <- function(input, output, session) {
   })
   
   # Function for determining date range
-  get_week_date_range <- function(year, week) {
+  get_week_date_range <- function(year, week, format = FALSE) {
     # Get the first day of the year
     first_day <- as.Date(paste0(year, "-01-01"))
     
@@ -963,6 +1040,16 @@ server <- function(input, output, session) {
     
     # Format the date range
     paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
+    
+    if (format == FALSE) {
+      drange <- paste(format(start_date, "%m/%d/%Y"), "-", format(end_date, "%m/%d/%Y"))
+    }
+    
+    else if (format == TRUE) {
+      drange <- paste0("Week ", week, " (",format(start_date, "%m/%d"), "-", format(end_date, "%m/%d"), ")")
+    }
+    
+    return(drange)
   }
   
   # List of locations

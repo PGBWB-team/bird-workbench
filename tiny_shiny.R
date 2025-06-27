@@ -8,6 +8,8 @@ library(lubridate)
 library(av)
 library(seewave)
 library(viridisLite)
+library(DBI)
+library(RSQLite)
 
 #################################################
 # Set file path variables (Requires User Input) #
@@ -17,7 +19,10 @@ library(viridisLite)
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # parent_shiny_url format: "http://pgbwb.com/"
-parent_shiny_url <- "http://127.0.0.1:5865/"
+parent_shiny_url <- "http://127.0.0.1:7357/"
+
+# File path to SQL weather database
+weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
 
 ##############
 # Start Code #
@@ -57,27 +62,44 @@ ui <- page_sidebar(
     
     width = 370
   ),
-  
-  # card(
-  #   style = "height: 70vh; display: flex; flex-direction: column;",
-  #   card_header("Spectrogram"),
-  #   div(
-  #     style = "flex-grow: 1;",
-  #     plotOutput("spectrogram", height = "500px") %>% withSpinner()
-  #   )
-  # ),
-  
-# 
-#   # plotOutput("spectrogram") %>% withSpinner(),
-#   uiOutput("audio_player") %>% withSpinner(),
-#   
-  uiOutput("scrolling_spectro") %>% withSpinner(),
-  
-  layout_columns(
-    downloadButton("audioDownload", "Download Audio"),
-    uiOutput("parent_url"),
-    uiOutput("cornell_link")
+
+   # card(
+   #   style = "height: 70vh; display: flex; flex-direction: column;",
+   #   card_header("Spectrogram"),
+   #   div(
+   #     style = "flex-grow: 1;",
+   #     plotOutput("spectrogram", height = "500px") %>% withSpinner()
+   #   )
+   # ),
+
+  fluidRow(
+    plotOutput("spectrogram") %>% withSpinner(),
+    uiOutput("audio_player") %>% withSpinner(),
+    
+    #  uiOutput("scrolling_spectro") %>% withSpinner(),
+    
+    layout_columns(
+      downloadButton("audioDownload", "Download Audio"),
+      downloadButton("videoDownload", "Download Video"),
+      uiOutput("parent_url"),
+      uiOutput("cornell_link")
+    ),
+    
+    plotOutput("wind_plot") %>% withSpinner()
   )
+ #   plotOutput("spectrogram") %>% withSpinner(),
+ #   uiOutput("audio_player") %>% withSpinner(),
+ # 
+ # #  uiOutput("scrolling_spectro") %>% withSpinner(),
+ #  
+ #  layout_columns(
+ #    downloadButton("audioDownload", "Download Audio"),
+ #    downloadButton("videoDownload", "Download Video"),
+ #    uiOutput("parent_url"),
+ #    uiOutput("cornell_link")
+ #  ),
+ # 
+ # plotOutput("wind_plot") %>% withSpinner()
   )
 
 # Server Code:
@@ -146,6 +168,56 @@ server <- function(input, output, session) {
       generate_audio_and_spectrogram()
     }
   })
+  
+  output$wind_plot <- renderPlot({
+    req(values$file_name)
+    file_name <- values$file_name
+    
+    date_time_start <- get_date_time(file_name)
+    date_time_end <- date_time_start + 3600
+    
+    plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+    plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+    
+    # Connect to SQLite database
+    con <- dbConnect(RSQLite::SQLite(), weather_path)
+    
+    query <- "
+    SELECT
+      value AS windspeed,
+      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
+    FROM windSpeed
+    WHERE
+      time >= ? AND
+      time < ?
+  "
+    
+    wind <- dbGetQuery(con, query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+    dbDisconnect(con)
+    
+    # Convert time back to POSIXct for ggplot
+    wind$time <- as.POSIXct(wind$time, tz = "UTC")
+    
+    # define region of audio file for plotting
+    regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+    
+    ggplot(wind, aes(time, windspeed)) + 
+      geom_line(linewidth = 1) +
+      geom_rect(data = regions,
+                inherit.aes = FALSE,
+                mapping = aes(xmin = x1, xmax = x2,
+                              ymin = y1, ymax = y2,
+                              fill = "Audio File"),  # Just use a simple category name
+                color = "transparent",
+                alpha = 0.2) +
+      scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                        values = c("Audio File" = "#007bc2")) +
+      labs(title = "Wind Speed", x = "Date Time", y = "Wind Speed (mph)") +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+  
+  })
+  
 
   generate_audio_and_spectrogram <- reactive({
     req(values$file_name)
@@ -189,28 +261,28 @@ server <- function(input, output, session) {
                                    start_time = as.numeric(values$begin_time) - as.numeric(recording_offset),
                                    total_time = as.numeric(recording_secs))
     
-    av_spectro_vid <- av_spectrogram_video(output_wav,
-                                           output = dest_vid_path,
-                                           width = 1200, 
-                                           height = 550, 
-                                           res = 72,
-                                           framerate = 20)
+    # av_spectro_vid <- av_spectrogram_video(output_wav,
+    #                                        output = dest_vid_path,
+    #                                        width = 1200, 
+    #                                        height = 550, 
+    #                                        res = 72,
+    #                                        framerate = 20)
     
-    # # Generate audio tag
-    # output$audio_player <- renderUI({
-    #   tags$audio(src = audio_src,
-    #              type = "audio/wav",
-    #              controls = NA,
-    #              autoplay = NA)
-    # })
-    
-    output$scrolling_spectro <- renderUI({
-      tags$video(src = vid_src,
-                 type = "video/mp4", 
-                 autoplay = NA,
-                 controls = NA)
+    # Generate audio tag
+    output$audio_player <- renderUI({
+      tags$audio(src = audio_src,
+                 type = "audio/wav",
+                 controls = NA,
+                 autoplay = NA)
     })
     
+    # output$scrolling_spectro <- renderUI({
+    #   tags$video(src = vid_src,
+    #              type = "video/mp4", 
+    #              autoplay = NA,
+    #              controls = NA)
+    # })
+    # 
     audio_wav <- tuneR::readWave(output_wav)
     
     v <- seewave::ggspectro(audio_wav, ovlp = 50) +
@@ -219,9 +291,7 @@ server <- function(input, output, session) {
       scale_fill_gradientn(colours = viridis(256, option = "B"),
                            limits = c(-90, 0))
     
-    # output$spectrogram <- renderPlot(v)
-    
-    
+    output$spectrogram <- renderPlot(v)
     
     output$audioDownload <- downloadHandler(
       filename = function() {
@@ -233,6 +303,36 @@ server <- function(input, output, session) {
         file.copy(dest_path, file_path)
       }, 
       contentType = "audio/wav"
+    )
+    
+    output$videoDownload <- downloadHandler(
+      filename = function() {
+        req(values$file_name)
+        paste0(tools::file_path_sans_ext(basename(values$file_name)), "_spectrogram.mp4")
+      },
+      content = function(file_path) {
+        req(values$file_name)
+        
+        # Show progress indicator that updates immediately
+        withProgress(message = 'Generating spectrogram video', value = 0.1, {
+          incProgress(0.1, detail = "Starting video generation...")
+          
+          # Force progress update to display
+          Sys.sleep(0.1)
+          incProgress(0.1, detail = "This can take a minute...")
+          
+          # Generate the video here - this only happens when button is clicked
+          av_spectro_vid <- av_spectrogram_video(output_wav,
+                                                 output = file_path,
+                                                 width = 1200, 
+                                                 height = 550, 
+                                                 res = 72,
+                                                 framerate = 20)
+          
+          incProgress(0.7, detail = "Video generation complete!")
+        })
+      },
+      contentType = "video/mp4"
     )
     
     routing_text <- "#species_loc_drilldown?species="
