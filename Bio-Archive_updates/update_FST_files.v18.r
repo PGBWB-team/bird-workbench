@@ -25,6 +25,7 @@ library(fuzzyjoin)
 input_COMBINED_file <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
 
 # Set file path for writing a single-year .fst file -- include a matching year in file name as we are creating one .FST per year 
+
 fst_output <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2025.m18_v2.fst"
 
 # Specify paths to single-year FST files which will be combined into an all-years combined FST to be used as input by the UI script
@@ -39,9 +40,11 @@ yearly_FST_input_paths <- c(
 )
 
 # Set file path for all-years combined .fst file - this file (or a renamed version of it) gets handed to the UI script as input 
+
 combined_FST_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2020_2021_2022_2023_2024_2025.m18_v2.fst"
 
 # File path to SQL weather database
+
 weather_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/weather_snoop_valley_weather/valley.weather.db"
 
 ## Set start end end dates for the SQL select that match the year of the input and output files.  
