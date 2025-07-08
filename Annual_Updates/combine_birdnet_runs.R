@@ -25,7 +25,7 @@ file_2020 <- "C:/Users/laure/Dropbox/Lauren Wick/2020 BirdNET runs//Combined_202
 file_list <- c(file_2024, file_2023, file_2022, file_2021, file_2020)
 
 # Set file path for writing .fst output
-fst_output <- "C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061225_weather.fst"
+fst_output <- "C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_output_061825_weather.fst"
 
 # File path to SQL weather database
 weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
@@ -91,6 +91,7 @@ data_70 <- lapply(data_70, function(df) {
   df["Date.Time"] <- ymd_hms(df$Date.Time, tz="UTC")
   df["Day.Of.Year"] <- yday(df$Date)
   df["Month"] <- factor(month.abb[lubridate::month(as.Date(df$Date))], levels = month.abb)
+  df <- df[complete.cases(df$Date),]
   df["Week"] <- get_week_from_date(df$Date)
   df["Obs.Time"] <- strftime(df$Date.Time + lubridate::seconds(as.numeric(df$Begin.Time..s.)), format="%H:%M:%S", tz = "UTC")
 
