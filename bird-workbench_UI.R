@@ -35,7 +35,7 @@ all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_o
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- "http://127.0.0.1:6024/?"
+tiny_shiny <- "enterpath"
 
 ##############
 # Start Code #
