@@ -271,6 +271,7 @@ server <- function(input, output, session) {
   
   observeEvent(species_click(), {
     req(species_click())
+    req(input$main_nav)
     req(input$main_nav %in% c("species_overview", "species_loc_drilldown"))
     
     # Construct the new URL hash with species query
@@ -296,7 +297,6 @@ server <- function(input, output, session) {
     first_day <- as.Date(paste0(year, "-01-01"))
     
     # Find the first Sunday of the year
-    first_sunday <- first_day + (7 - lubridate::wday(first_day) + 1) %% 7
     
     # Calculate the difference in days between the given date and the first Sunday
     days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
@@ -601,22 +601,22 @@ server <- function(input, output, session) {
   })
   
   # Table rendering
-  output$species_by_month_pivot <- renderDataTable({
+  output$species_by_month_pivot <- DT::renderDT({
     req(pivot_ready())
     create_table_pivot(species_by_month())
   })
   
-  output$species_by_location_pivot <- renderDataTable({
+  output$species_by_location_pivot <- DT::renderDT({
     req(pivot_ready())
     create_table_pivot(species_by_location())
   })
   
-  output$species_by_year_pivot <- renderDataTable({
+  output$species_by_year_pivot <- DT::renderDT({
     req(pivot_ready())
     create_table_pivot(species_by_year())
   })
   
-  output$species_by_week_pivot <- renderDataTable({
+  output$species_by_week_pivot <- DT::renderDT({
     req(pivot_ready())
     create_table_pivot(species_by_week(), current_week = get_week_date_range(year = lubridate::year(Sys.time()),
                                                                              week = get_week_from_date(Sys.time()),
@@ -930,7 +930,7 @@ server <- function(input, output, session) {
   })
   
   # Render the pivot table
-  output$file_list_pivot <- renderDataTable(
+  output$file_list_pivot <- DT::renderDT(
     {
     datatable(file_list(),
               escape = FALSE,
@@ -1375,7 +1375,7 @@ server <- function(input, output, session) {
     }
     
     # filter data based on the selected bin center
-    output$filtered_data <- DT::renderDataTable({
+    output$filtered_data <- DT::renderDT({
       
       min_conf <- debounced_conf()[1]
       max_conf <- debounced_conf()[2]
