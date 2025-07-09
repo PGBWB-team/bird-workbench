@@ -6,19 +6,27 @@
 # loops through the directory containing BirdNET's results files for the year and merges all the
 # results into a single file for the year
 
+########################################################
+# Initialize paths and variables - User input required #
+########################################################
+
+INPUT_DIRECTORY_PATH="$HOME/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025"
+
+OUTPUT_FILE_PATH="$HOME/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
+
 # EDIT - Directory containing the files to process
-input_dir="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025" 
+# input_dir="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025" 
 # EDIT - Output file
-output_file="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
+# output_file="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
 
 # Ensure the output file is empty initially
-> "$output_file"
+> "$OUTPUT_FILE_PATH"
 
 # Variable to track if the header line has been written
 header_written=false
 
 # Loop through each file in the directory
-for file in "$input_dir"/*; do
+for file in "$INPUT_DIRECTORY_PATH"/*; do
 
   # Skip files containing "analysis_params" in the filename
   if [[ "$file" == *analysis_params* ]]; then
@@ -36,12 +44,12 @@ for file in "$input_dir"/*; do
     if [[ "$line" == *"Confidence"* ]]; then
       # Only write the header line once
       if [[ "$header_written" == false ]]; then
-        echo "$line" >> "$output_file"
+        echo "$line" >> "$OUTPUT_FILE_PATH"
         header_written=true
       fi
     else
       # Append non-header line to output file
-      echo "$line" >> "$output_file"
+      echo "$line" >> "$OUTPUT_FILE_PATH"
 	  
     fi
   done < "$file"
