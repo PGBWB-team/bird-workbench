@@ -25,7 +25,7 @@ BIRDNET_INPUT_FILE_PATH="/Volumes/Bio/Bio 2025/From Recorders"
 
 BIRDNET_OUTPUT_FILE_PATH="$HOME/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025"
 	
-RUN_FILE_COMBINER_SHELL_SCRIPT_PATH="$HOME/Documents/BirdWorkbench/BirdWorkbench_BASH_scripts/BirdNET_run_file_combinerV3.sh"
+RUN_FILE_COMBINER_SHELL_SCRIPT_PATH="$HOME/Documents/BirdWorkbench/BirdWorkbench_BASH_scripts/BirdNET_run_file_combiner.sh"
 
 REGENERATE_FST_FILES_SCRIPT_PATH="$HOME/Documents/BirdWorkbench/BirdWorkbench_R_Scripts/combine_birdnet_runs.m18.looper_2025.R"
 	
