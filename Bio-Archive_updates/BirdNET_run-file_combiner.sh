@@ -1,4 +1,4 @@
-#!/bin/bash
+fd#!/bin/bash
 
 # This script is typically called as a part of the Archive to FST Update process
 # after BirdNET-Analyzer has created new results files that need to be merged into
