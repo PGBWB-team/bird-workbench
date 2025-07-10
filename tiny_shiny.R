@@ -19,7 +19,7 @@ library(RSQLite)
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # parent_shiny_url format: "http://pgbwb.com/"
-parent_shiny_url <- "enterpath"
+parent_shiny_url <- ""
 
 # File path to SQL weather database
 weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"

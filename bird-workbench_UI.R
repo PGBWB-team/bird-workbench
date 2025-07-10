@@ -18,7 +18,8 @@ library(shinyjs)
 library(glue)
 library(hms)
 library(shinycssloaders)
-library(scales)
+library(DBI)
+library(RSQLite)
 
 #################################################
 # Set file path variables (Requires User Input) #
@@ -32,11 +33,13 @@ all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_o
                                       "avg_windspeed", "avg_temperature", "Obs.Time"))
 
 # Set root folder for audio files
-
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- "enterpath"
+tiny_shiny <- ""
+
+# File path to SQL weather database
+weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
 
 ##############
 # Start Code #
@@ -305,10 +308,10 @@ ui <- bslib::page_navbar(
     layout_sidebar(
       sidebar = sidebar(
         width = "500px",
-        open = TRUE,
+        open = FALSE,
         bslib::accordion(
           id = "file_drilldown_accordion",
-          open = TRUE,
+          open = FALSE,
           accordion_panel(
             "Happiness Scale",
             icon = icon("filter"),
@@ -330,11 +333,29 @@ ui <- bslib::page_navbar(
                 tags$span("Pretty good")
               )
             )
+          ),
+          accordion_panel(
+            "Plot Settings",
+            icon = icon("chart-simple"),
+            radioButtons(
+              inputId = "weather_context",
+              label = "Weather Time Range",
+              choices = c("24 Hour Context" = "day", "1 Hour Context" = "hour"),
+              selected = "day"
+            )
           )
         )
       ),
       
       verticalLayout(
+        conditionalPanel(
+          condition = "input.main_nav == 'audio_file_drilldown'",
+          plotOutput("file_wind_plot")
+        ),
+        conditionalPanel(
+          condition = "input.main_nav == 'audio_file_drilldown'",
+          plotOutput("file_temp_plot")
+        ),
         conditionalPanel(
           condition = "input.main_nav == 'audio_file_drilldown",
           plotlyOutput("audio_file_drilldown_plot")
@@ -1078,19 +1099,19 @@ server <- function(input, output, session) {
   create_pivot_files <- function(df) {
     
     # First, get the top 3 species per file group
-    top_species_df <- df %>%
-      group_by(Begin.Path, Common.Name) %>%
-      summarise(Species.Count = n(), .groups = "drop") %>%
-      arrange(Begin.Path, desc(Species.Count)) %>%
-      group_by(Begin.Path) %>%
-      slice_head(n = 1) %>%
-      mutate(Rank = paste0("Top.Species.", row_number())) %>%
-      select(Begin.Path, Rank, Common.Name) %>%
-      pivot_wider(
-        names_from = Rank,
-        values_from = Common.Name,
-        values_fill = NA
-      )
+    # top_species_df <- df %>%
+    #   group_by(Begin.Path, Common.Name) %>%
+    #   summarise(Species.Count = n(), .groups = "drop") %>%
+    #   arrange(Begin.Path, desc(Species.Count)) %>%
+    #   group_by(Begin.Path) %>%
+    #   slice_head(n = 1) %>%
+    #   mutate(Rank = paste0("Top.Species.", row_number())) %>%
+    #   select(Begin.Path, Rank, Common.Name) %>%
+    #   pivot_wider(
+    #     names_from = Rank,
+    #     values_from = Common.Name,
+    #     values_fill = NA
+    #   )
     
     find_audio_file_full <- function(row) {
       if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
@@ -1130,7 +1151,7 @@ server <- function(input, output, session) {
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
       mutate(Year = as.character(lubridate::year(Date))) %>%
       mutate(Month = as.character(lubridate::month(Date, label = TRUE, abbr = FALSE))) %>%
-      left_join(top_species_df, by = "Begin.Path") %>%
+      # left_join(top_species_df, by = "Begin.Path") %>%
       rowwise() %>%
       mutate(Play.Audio = {
         audio_id <- find_audio_file_full(pick(everything()))
@@ -1176,7 +1197,8 @@ server <- function(input, output, session) {
       select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Year, Month, Time, Time.Of.Day, 
              Mean.Confidence, avg_temperature, avg_windspeed,
-             Top.Species.1, Score, Score_Color, row_index)
+             # Top.Species.1, 
+             Score, Score_Color, row_index)
 
     return(df_all_cols)
   }
@@ -1202,7 +1224,8 @@ server <- function(input, output, session) {
               selection = "single",
               # class = "row-border",
               options = list(
-                dom = "Blfrtip",
+                # dom = "Blfrtip",
+                dom = 'lrt<"row"<"col-sm-4"f><"col-sm-4"B><"col-sm-4"i>>p',
                 ordering = TRUE,
                 buttons = list(
                   list(extend = 'csv', className = 'btn-sm'),
@@ -1270,10 +1293,13 @@ server <- function(input, output, session) {
   })
   
   output$audio_file_pivot_view <- renderUI({
-    div(
-      id = "sfile_list_pivot_wrapper",
-      `data-table-id` = "file_list_pivot",
-      DT::dataTableOutput("file_list_pivot") %>% withSpinner()
+    tagList(
+      p(icon("circle-info"), strong("Double click a row below to view file specific details")),
+      div(
+        id = "file_list_pivot_wrapper",
+        `data-table-id` = "file_list_pivot",
+        DT::dataTableOutput("file_list_pivot") %>% withSpinner()
+      )
     )
   })
 
@@ -1336,18 +1362,153 @@ server <- function(input, output, session) {
   
   observe({
     req(filtered_data())
+    req(!is.null(file_click()))
+    
+    file_details_dt <- subset(filtered_data(), Begin.Path == file_click())
+    file_details_dt <- file_details_dt %>%
+      rowwise() %>%
+      mutate(Sound.Button = list({
+        url_val <- find_audio_file(.data)
+        if (!is.null(url_val)) {
+          paste0(
+            '<a class="btn btn-primary" target="_blank" href="',
+            url_val,
+            '">Open Observation</a>'
+          )
+        } else {
+          "No Audio Available"
+        }
+      }))
+    
+    file_details_data(file_details_dt)
+  })
+  
+  get_date_time <- function(file_nm) {
+    if (is.null(file_nm) || file_nm == "") {
+      return(NULL)
+    }
+    
+    date <- unlist(strsplit(basename(file_nm), split = "_"))[2]
+    time <- substr(unlist(strsplit(basename(file_nm), split = "_"))[3], start = 1, stop = 6)
+    date_time <- ymd_hms(paste(date, time), tz="UTC")
+    return(date_time)
+  }
+  
+  output$file_wind_plot <- renderPlot({
     req(file_click())
     
-    file_details_data(subset(filtered_data(), Begin.Path == file_click()))
+    date_time_start <- get_date_time(file_click())
+    date_time_end <- date_time_start + 3600
+    
+    plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+    plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+    
+    if (input$weather_context == "hour") {
+      plot_time_start <- date_time_start
+      plot_time_end <- date_time_end
+    }
+    
+    # Connect to SQLite database
+    con <- dbConnect(RSQLite::SQLite(), weather_path)
+    
+    wind_query <- "
+    SELECT
+      value AS windspeed,
+      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
+    FROM windSpeed
+    WHERE
+      time >= ? AND
+      time < ?
+  "
+    
+    wind <- dbGetQuery(con, wind_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+    dbDisconnect(con)
+    
+    # Convert time back to POSIXct for ggplot
+    wind$time <- as.POSIXct(wind$time, tz = "UTC")
+    wind <- wind[format(as.POSIXct(wind$time), "%S") != "00",]
+    
+    # define region of audio file for plotting
+    regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+    
+    ggplot(wind, aes(time, windspeed)) + 
+      geom_line(linewidth = 1) +
+      geom_rect(data = regions,
+                inherit.aes = FALSE,
+                mapping = aes(xmin = x1, xmax = x2,
+                              ymin = y1, ymax = y2,
+                              fill = "Audio File"),  # Just use a simple category name
+                color = "transparent",
+                alpha = 0.2) +
+      scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                        values = c("Audio File" = "#007bc2")) +
+      labs(title = "Wind Speed", x = "Date Time", y = "Wind Speed (mph)") +
+      theme_minimal() +
+      theme(legend.position = "bottom")
   })
+  
+  output$file_temp_plot <- renderPlot({
+    req(file_click())
+    
+    date_time_start <- get_date_time(file_click())
+    date_time_end <- date_time_start + 3600
+    
+    plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+    plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+    
+    if (input$weather_context == "hour") {
+      plot_time_start <- date_time_start
+      plot_time_end <- date_time_end
+    }
+    
+    # Connect to SQLite database
+    con <- dbConnect(RSQLite::SQLite(), weather_path)
+    
+    temp_query <- "
+    SELECT
+      value AS temp,
+      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
+    FROM outdoorTemperature
+    WHERE 
+      time >= ? AND
+      time < ?
+    "
+    temp <- dbGetQuery(con, temp_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+    dbDisconnect(con)
+    
+    # Convert time back to POSIXct for ggplot
+    temp$time <- as.POSIXct(temp$time, tz = "UTC")
+    temp <- temp[format(as.POSIXct(temp$time), "%S") != "00",]
+    
+    # define region of audio file for plotting
+    regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+    
+    ggplot(temp, aes(time, temp)) + 
+      geom_line(linewidth = 1) +
+      geom_rect(data = regions,
+                inherit.aes = FALSE,
+                mapping = aes(xmin = x1, xmax = x2,
+                              ymin = y1, ymax = y2,
+                              fill = "Audio File"),  # Just use a simple category name
+                color = "transparent",
+                alpha = 0.2) +
+      scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                        values = c("Audio File" = "#007bc2")) +
+      labs(title = "Temperature", x = "Date Time", y = "Temperature (°F)") +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+  })
+  
+  
+
   
   output$audio_file_drilldown_plot <- renderPlotly({
     file_details_plot_data <- file_details_data()
     
-    p_file <- ggplot(file_details_plot_data, aes(x = Obs.Time, y = Confidence)) +
+    p_file <- ggplot(file_details_plot_data, aes(x = Date.Time + as.numeric(Begin.Time..s.), y = Confidence)) +
                 geom_point(aes(color = factor(Common.Name))) +
                 labs(title = "File Details", x = "Time", y = "Confidence") +
-               #  scale_x_time(breaks = scales::breaks_width("10 min")) +
+                # scale_x_time() +
                 theme_minimal()
     
     plotly_object <- ggplotly(p_file)
@@ -1363,12 +1524,15 @@ server <- function(input, output, session) {
                 selection = "none",
                 filter = "top",
                 rownames = FALSE,
+                fillContainer = TRUE,
                 options = list(
                   fixedHeader = list(header = TRUE),
                   columnDefs = list(list(visible = FALSE, 
                                          targets = c("Begin.Time..s.", "End.Time..s.", "Species.Code", "Begin.Path", "Location", "Date", 
                                                      "Date.Time", "Month", "Week", "avg_windspeed", 
-                                                     "avg_temperature")))
+                                                     "avg_temperature"))),
+                  scrollY = 500, 
+                  scrollX = TRUE
                 ))
     )
   })
@@ -1688,6 +1852,47 @@ server <- function(input, output, session) {
       as.character(FUN(paste0(id), ...))
   }
   
+  find_audio_file <- function(row) {
+    if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "" || identical(row$Begin.Path, character(0))) {
+      return(NULL)
+    }
+    
+    file_name <- basename(row[["Begin.Path"]])
+    year_val <- year(row[["Date"]])
+    file_loc <- paste0(audio_filepath, "Bio ", as.character(year_val), "/From Recorders")
+    audio_loc <- file.path(file_loc, file_name)
+    
+    if (!file.exists(audio_loc)) {
+      return(NULL)
+    }
+    
+    begin_time <- as.numeric(row[["Begin.Time..s."]])
+    species_name <- row[["Common.Name"]]
+    species_code <- row[["Species.Code"]]
+    conf <- row[["Confidence"]]
+    loc <- row[["Location"]]
+    temp <- paste(round(row[["avg_temperature"]], 3), "°F")
+    wind <- paste(round(row[["avg_windspeed"]], 3), "MPH")
+    
+    # Encode for URL
+    species_name <- URLencode(species_name)
+    file_name <- URLencode(file_name)
+    loc <- URLencode(loc)
+    
+    url <- paste0(
+      tiny_shiny,
+      "species_name=", species_name,
+      "&species_code=", species_code,
+      "&conf=", conf,
+      "&loc=", loc,
+      "&temp=", temp,
+      "&wind=", wind,
+      "&file_name=", file_name,
+      "&begin_time=", begin_time
+    )
+    
+    return(url)
+  }
 
   # Observe the selected data and filter the original dataframe
   observe({
@@ -1695,48 +1900,6 @@ server <- function(input, output, session) {
     
     # Combine file listings for all species
     selected_data(event_data("plotly_selected"))
-    
-    find_audio_file <- function(row) {
-      if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
-        return(NULL)
-      }
-      
-      file_name <- basename(row[["Begin.Path"]])
-      year_val <- year(row[["Date"]])
-      file_loc <- paste0(audio_filepath, "Bio ", as.character(year_val), "/From Recorders")
-      audio_loc <- file.path(file_loc, file_name)
-      
-      if (!file.exists(audio_loc)) {
-        return(NULL)
-      }
-      
-      begin_time <- as.numeric(row[["Begin.Time..s."]])
-      species_name <- row[["Common.Name"]]
-      species_code <- row[["Species.Code"]]
-      conf <- row[["Confidence"]]
-      loc <- row[["Location"]]
-      temp <- paste(round(row[["avg_temperature"]], 3), "°F")
-      wind <- paste(round(row[["avg_windspeed"]], 3), "MPH")
-      
-      # Encode for URL
-      species_name <- URLencode(species_name)
-      file_name <- URLencode(file_name)
-      loc <- URLencode(loc)
-      
-      url <- paste0(
-        tiny_shiny,
-        "species_name=", species_name,
-        "&species_code=", species_code,
-        "&conf=", conf,
-        "&loc=", loc,
-        "&temp=", temp,
-        "&wind=", wind,
-        "&file_name=", file_name,
-        "&begin_time=", begin_time
-      )
-      
-      return(url)
-    }
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDT({
