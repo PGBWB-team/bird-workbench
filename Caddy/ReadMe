@@ -5,8 +5,8 @@ Caddy is used as a reverse proxy to map pgbwb.com and birdomatic.com URLs to run
 Much more about this at https://caddyserver.com/.  Chatbots ala ChatGPT are a great help explanining what's going 
 on and getting it set up.
 
-We use DNS to point pgbwb.com and birdomatic.com URLs to our external network address.  Caddy maps what IP address and port those requests should be 
-routed to based on the incoming URL.  
+We use DNS to point pgbwb.com and birdomatic.com URLs to our external network address.  Caddy maps what IP 
+address and port those requests should be routed to based on the incoming URL.  
 
 For example: 
    prod.pgbwb.com might go to IP 192.168.1.222 port 8888 
