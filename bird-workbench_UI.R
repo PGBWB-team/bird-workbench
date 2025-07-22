@@ -36,10 +36,24 @@ all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_o
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- ""
+tiny_shiny <- "http://127.0.0.1:3271/?"
 
 # File path to SQL weather database
 weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
+
+
+footer_text <- p("This project is powered by ",
+                 tags$a("BirdNET Analyzer", href = "https://github.com/birdnet-team/BirdNET-Analyzer", target = "_blank"),
+                 ", ",
+                 tags$a("the R Project", href = "https://www.r-project.org/", target = "_blank"), 
+                 ", ",
+                 tags$a("PGBWB-team", href = "https://github.com/PGBWB-team/bird-workbench", target = "_blank"),
+                 ", ",
+                 tags$a("Shiny", href = "https://shiny.posit.co/", target = "_blank"), 
+                 ", and ",
+                 tags$a("Prairie Haven", href = "https://www.earsinthedriftless.com/", target = "_blank")
+                 )
+
 
 ##############
 # Start Code #
@@ -86,6 +100,15 @@ ui <- bslib::page_navbar(
             )
           ),
           accordion_panel(
+            "Species Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "species_lookup_overview",
+                           label = NULL,
+                           choices = unique(all_data$Common.Name),
+                           multiple = TRUE, 
+                           selected = NULL)
+          ),
+          accordion_panel(
             "Pivot Table Selection",
             icon = icon("table"),
             selectInput(inputId = "sel_view",
@@ -106,6 +129,8 @@ ui <- bslib::page_navbar(
             )
             # uiOutput("overview_view") %>% withSpinner()
           ),
+          p(),
+          footer_text
         )
       ),
       conditionalPanel(
@@ -149,6 +174,15 @@ ui <- bslib::page_navbar(
             )
           ),
           accordion_panel(
+            "Species Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "species_lookup_location",
+                           label = NULL,
+                           choices = unique(all_data$Common.Name),
+                           multiple = FALSE,
+                           selected = "Acadian Flycatcher")
+          ),
+          accordion_panel(
             "Plot Settings",
             icon = icon("chart-simple"),
             radioButtons(
@@ -166,7 +200,9 @@ ui <- bslib::page_navbar(
             p(),
             uiOutput("macaulay",
                      label = "Macaulay Library")
-          )
+          ),
+          p(),
+          footer_text
       )
       ),
       
@@ -224,7 +260,18 @@ ui <- bslib::page_navbar(
                 tags$span("Pretty good")
               )
             )
-          )
+          ),
+          accordion_panel(
+            "Species Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "species_lookup_species_overview",
+                           label = NULL,
+                           choices = unique(all_data$Common.Name),
+                           multiple = FALSE, 
+                           selected = "Acadian Flycatcher")
+          ),
+          p(),
+          footer_text
         )
       ),
       
@@ -285,7 +332,9 @@ ui <- bslib::page_navbar(
               uiOutput("species_to_exclude")
             )
             # uiOutput("species_to_exclude")
-          )
+          ),
+          p(),
+          footer_text
         )
       ),
       
@@ -335,6 +384,14 @@ ui <- bslib::page_navbar(
             )
           ),
           accordion_panel(
+            "File Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "file_lookup_drilldown",
+                           label = NULL,
+                           choices = NULL,
+                           multiple = FALSE)
+          ),
+          accordion_panel(
             "Plot Settings",
             icon = icon("chart-simple"),
             radioButtons(
@@ -343,7 +400,9 @@ ui <- bslib::page_navbar(
               choices = c("24 Hour Context" = "day", "1 Hour Context" = "hour"),
               selected = "day"
             )
-          )
+          ),
+          p(),
+          footer_text
         )
       ),
       
@@ -407,9 +466,20 @@ ui <- bslib::page_navbar(
     .navbar-nav > li:last-child {
       order: 2;
     }
+    
+    # .footer {
+    #   position: absolute;
+    #   bottom: 0;
+    #   left: 0;
+    #   text-align:right;
+    #   width: 100%;
+    #   height:2.5rem;
+    # }
 
   "))
     ),
+    
+    # tags$footer("This project is powered by BirdNET Analyzer and the R Project.", class = "footer"),
     
     tags$style(HTML("
   .lightblue {
@@ -432,7 +502,8 @@ server <- function(input, output, session) {
 
   
   # Reactive value to store the selected species code
-  species_click <- reactiveVal("acafly") # Default species code
+  species_click <- reactiveVal(NULL) # Default species code
+  file_click <- reactiveVal(NULL)
   
   observeEvent(session$clientData$url_hash, {
     fullHash <- session$clientData$url_hash # e.g., "#species_overview?species=cedwre"
@@ -442,13 +513,23 @@ server <- function(input, output, session) {
     queryString <- strsplit(fullHash, "\\?")[[1]][2]
     
     species <- NULL
-    if (!is.na(queryString)) {
+    file_name <- NULL
+    if (!is.na(queryString) & tab == "species_loc_drilldown") {
       params <- strsplit(queryString, "&")[[1]]
       params_list <- setNames(
         sapply(strsplit(params, "="), `[`, 2),
         sapply(strsplit(params, "="), `[`, 1)
       )
       species <- params_list[["species"]]
+    }
+    
+    if (!is.na(queryString) & tab == "audio_file_drilldown") {
+      params <- strsplit(queryString, "&")[[1]]
+      params_list <- setNames(
+        sapply(strsplit(params, "="), `[`, 2),
+        sapply(strsplit(params, "="), `[`, 1)
+      )
+      file_name <- params_list[["file"]]
     }
     
     if (!is.null(tab)) {
@@ -459,6 +540,11 @@ server <- function(input, output, session) {
     if (!is.null(species)) {
       species_click(species)
     }
+    
+    if (!is.null(file_name)) {
+      file_click(file_name)
+    }
+
   }, priority = 1)
   
   
@@ -468,6 +554,10 @@ server <- function(input, output, session) {
     # If species_click() is defined, include it in the URL
     if (input$main_nav %in% c("species_overview", "species_loc_drilldown") && !is.null(species_click())) {
       pushQueryString <- paste0("#", input$main_nav, "?species=", species_click())
+      print(pushQueryString)
+    } else if (input$main_nav == "audio_file_drilldown") {
+      pushQueryString <- paste0("#", input$main_nav, "?file=", file_click())
+      print(pushQueryString)
     } else {
       pushQueryString <- paste0("#", input$main_nav)
     }
@@ -476,20 +566,46 @@ server <- function(input, output, session) {
       freezeReactiveValue(input, "main_nav")  # avoid unnecessary reactivity loop
       updateQueryString(pushQueryString, mode = "push", session)
     }
+    
   }, priority = 0)
   
+  # 
+  # observeEvent(species_click(), {
+  #   req(species_click())
+  #   req(input$main_nav)
+  #   req(input$main_nav %in% c("species_overview", "species_loc_drilldown"))
+  #   
+  #   current_nav <- isolate(input$main_nav)
+  #   print(paste("Current nav:", current_nav))
+  #   print("hi")
+  #   
+  #   print(input$species_loc_drilldown)
+  #   
+  #   common_name <- unique(all_data$Common.Name[all_data$Species.Code == species_click()])
+  #   
+  #   updateSelectizeInput(inputId = "species_lookup_location",
+  #                        selected = common_name)
+  #   
+  #   # Construct the new URL hash with species query
+  #   newHash <- paste0("#", input$main_nav, "?species=", species_click())
+  #   print(newHash)
+  #   
+  #   # Update the URL without reloading the app
+  #   updateQueryString(newHash, mode = "push", session = session)
+  #   
+  # })
   
-  observeEvent(species_click(), {
-    req(species_click())
-    req(input$main_nav)
-    req(input$main_nav %in% c("species_overview", "species_loc_drilldown"))
-    
-    # Construct the new URL hash with species query
-    newHash <- paste0("#", input$main_nav, "?species=", species_click())
-    
-    # Update the URL without reloading the app
-    updateQueryString(newHash, mode = "push", session = session)
-  })
+  # observeEvent(file_click(), {
+  #   req(file_click())
+  #   req(input$main_nav)
+  #   req(input$main_nav == "audio_file_drilldown")
+  #   
+  #   # Construct new URL hash with audio file query
+  #   newHash <- paste0("#", input$main_nav, "?file=", file_click())
+  #   
+  #   # Update the URL without reloading the app
+  #   updateQueryString(newHash, mode = "push", session = session)
+  # })
   
   
   ###############################################
@@ -600,8 +716,9 @@ server <- function(input, output, session) {
     return(dt)
   }
   
-  create_pivot_month <- function(df, yr_input = "All", loc_input = "All") {
+  create_pivot_month <- function(df, yr_input = "All", loc_input = "All", species_input = NULL) {
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       mutate(Month = factor(month.abb[lubridate::month(as.Date(Date))], levels = month.abb)) %>%
@@ -632,8 +749,9 @@ server <- function(input, output, session) {
     return(df)
   }
   
-  create_pivot_week <- function(df, yr_input = "All", loc_input = "All", week_sel, time_input = "All") {
+  create_pivot_week <- function(df, yr_input = "All", loc_input = "All", week_sel, time_input = "All", species_input = NULL) {
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
@@ -678,7 +796,7 @@ server <- function(input, output, session) {
     
   }
 
-  create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel) {
+  create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel, species_input = NULL) {
     if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
       month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                      "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -689,6 +807,7 @@ server <- function(input, output, session) {
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     }
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
       filter(Month %in% month_sel) %>%
@@ -723,7 +842,7 @@ server <- function(input, output, session) {
   }
 
 
-  create_pivot_location <- function(df, yr_input = "All", month_sel, week_sel) {
+  create_pivot_location <- function(df, yr_input = "All", month_sel, week_sel, species_input = NULL) {
     
     if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
       month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -735,6 +854,7 @@ server <- function(input, output, session) {
     }
     
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>% 
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
       filter(Month %in% month_sel) %>%
@@ -843,7 +963,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent({
-    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel, input$time_sel)
+    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel, input$time_sel, input$species_lookup_overview)
     }, {
     shinyjs::enable("go")
     shinyjs::addClass("go", "lightblue")
@@ -861,7 +981,7 @@ server <- function(input, output, session) {
     req(input$loc_sel)
     req(filtered_data())
     
-    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel)
+    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel, input$species_lookup_overview)
   })
   
   species_by_location <- eventReactive(input$go, {
@@ -869,7 +989,7 @@ server <- function(input, output, session) {
     req(input$week_sel)
     req(filtered_data())
     
-    create_pivot_location(filtered_data(), input$year_sel, input$month_sel, input$week_sel)
+    create_pivot_location(filtered_data(), input$year_sel, input$month_sel, input$week_sel, input$species_lookup_overview)
   })
   
   species_by_year <- eventReactive(input$go, {
@@ -877,7 +997,7 @@ server <- function(input, output, session) {
     req(input$week_sel)
     req(filtered_data())
     
-    create_pivot_year(filtered_data(), input$loc_sel, input$month_sel, input$week_sel)
+    create_pivot_year(filtered_data(), input$loc_sel, input$month_sel, input$week_sel, input$species_lookup_overview)
   })
   
   species_by_week <- eventReactive(input$go, {
@@ -887,7 +1007,7 @@ server <- function(input, output, session) {
     req(input$time_sel)
     req(filtered_data())
     
-    create_pivot_week(filtered_data(), input$year_sel,input$loc_sel, input$week_sel, input$time_sel)
+    create_pivot_week(filtered_data(), input$year_sel,input$loc_sel, input$week_sel, input$time_sel, input$species_lookup_overview)
   })
   
   
@@ -992,35 +1112,70 @@ server <- function(input, output, session) {
   
   output$pivot_dt <- renderUI({
     req(input$sel_view)
-    req(pivot_ready() == TRUE)
     list(
-      p(),
-      p(icon("circle-info"), strong("Double click a row below to view species specific details")),
-      if (input$sel_view == "by_month") {
-        div(
-          id = "species_by_month_pivot_wrapper",
-          `data-table-id` = "species_by_month_pivot",
-          DT::dataTableOutput("species_by_month_pivot") 
+      if (pivot_ready() != TRUE) {
+        p("Click the Generate Table Button in the Sidebar to View Table")
+        uiOutput("waiting_image")
+        
+      } else if (input$sel_view == "by_month") {
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_month_pivot_wrapper",
+            `data-table-id` = "species_by_month_pivot",
+            DT::dataTableOutput("species_by_month_pivot") 
+          )
         )
       } else if (input$sel_view == "by_location") {
-        div(
-          id = "species_by_location_pivot_wrapper",
-          `data-table-id` = "species_by_location_pivot",
-          DT::dataTableOutput("species_by_location_pivot") 
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_location_pivot_wrapper",
+            `data-table-id` = "species_by_location_pivot",
+            DT::dataTableOutput("species_by_location_pivot") 
+          )
         )
       } else if (input$sel_view == "by_year") {
-        div(
-          id = "species_by_year_pivot_wrapper",
-          `data-table-id` = "species_by_year_pivot",
-          DT::dataTableOutput("species_by_year_pivot") 
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_year_pivot_wrapper",
+            `data-table-id` = "species_by_year_pivot",
+            DT::dataTableOutput("species_by_year_pivot") 
+          )
         )
+        
       } else if (input$sel_view == "by_week") {
-        div(
-          id = "species_by_week_pivot_wrapper",
-          `data-table-id` = "species_by_week_pivot",
-          DT::dataTableOutput("species_by_week_pivot")
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_week_pivot_wrapper",
+            `data-table-id` = "species_by_week_pivot",
+            DT::dataTableOutput("species_by_week_pivot")
+          )
         )
       }
+    )
+  })
+  
+  output$waiting_image <- renderUI({
+    tagList(
+      p(),
+      p(strong("Waiting for you to select 'Generate Table' in the Sidebar")),
+      div(
+        tags$img(src = "https://images.unsplash.com/photo-1526296609207-80e77afde33d?q=80&w=1980&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
+                 alt = "Tree Swallows",
+                 style = "max-width: 100%; height: auto;"),
+        p("Photo by ", 
+          tags$a("Dulcey Lima", href = "https://unsplash.com/@dulceylima", target = "_blank"),
+          " on ",
+          tags$a("Unsplash", href = "https://unsplash.com", target = "_blank"),
+          style = "font-size: 12px; color: #666; margin-top: 5px;")
+      )
     )
   })
   
@@ -1072,8 +1227,6 @@ server <- function(input, output, session) {
   ############################################  
   ## Application Build: Audio File Overview ##
   ############################################
-  
-  file_click <- reactiveVal("filename")
   
   species_values <- unique(all_data$Common.Name)
   default_species_vals <- c("American Crow", "American Goldfinch", "American Woodcock",
@@ -1358,6 +1511,26 @@ server <- function(input, output, session) {
   ## Applictaion Build: Audio File Drilldown ##
   #############################################
   
+  # Server side selection options because there are a lot. 
+  updateSelectizeInput(session, "file_lookup_drilldown", choices = c("Default", unique(all_data$Begin.Path)), selected = "Default", server = TRUE)
+  
+  # If a user manually searches for a species, update the species_click() reactive val
+  observeEvent(input$file_lookup_drilldown, {
+    file_name <- input$file_lookup_drilldown
+    
+    if (file_name != "Default"){
+      file_click(file_name)
+    }
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?file=", file_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+    
+  }, ignoreInit = TRUE)
+  
+  
   file_details_data <- reactiveVal(NULL)
   
   observe({
@@ -1541,6 +1714,20 @@ server <- function(input, output, session) {
   ##################################################
   ## Application Build: Species-Specific Overview ##
   ##################################################
+  
+  # If a user manually searches for a species, update the species_click() reactive val
+  observeEvent(input$species_lookup_species_overview, {
+    species_name <- unique(all_data$Species.Code[all_data$Common.Name == input$species_lookup_species_overview])
+    species_click(species_name)
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?species=", species_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+    
+  }, ignoreInit = TRUE)
+  
   output$species_title_overview <- renderUI({
     name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
     p(h3(name_title))
@@ -1583,7 +1770,6 @@ server <- function(input, output, session) {
     local({
       loc <- location_list[i]
       output[[paste0("overviewPlot_", i)]] <- renderPlotly({
-        cat("Rendering overviewPlot_", i, "for species:", species_click(), "\n")
         
         cols <- viridis(length(year_choices()), direction = 1, option = "plasma")
         names(cols) <- year_choices()
@@ -1638,6 +1824,19 @@ server <- function(input, output, session) {
   ############################################################
   ## Application Build: Species-Specific Location Drilldown ##
   ############################################################
+  
+  # If a user manually searches for a species, update the species_click() reactive val
+  observeEvent(input$species_lookup_location, {
+    species_name <- unique(all_data$Species.Code[all_data$Common.Name == input$species_lookup_location])
+    species_click(species_name)
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?species=", species_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+
+  }, ignoreInit = TRUE)
   
   output$species_title <- renderUI({
     name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
