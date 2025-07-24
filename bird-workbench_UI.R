@@ -206,25 +206,31 @@ ui <- bslib::page_navbar(
       )
       ),
       
-    # uiOutput("species_title"),
+
     conditionalPanel(
       condition = "input.main_nav == 'species_loc_drilldown'",
       uiOutput("species_title")
     ),
-    tabsetPanel(
-      id = "tab_selection",
-      !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
-        location <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i]
-        tabPanel(
-          title = location,
-          conditionalPanel(
-            condition = paste0("input.main_nav == 'species_loc_drilldown' && input.tab_selection == '", location, "'"),
-            plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner()
-          ),
-          br()
-        )
-      })
+    
+    conditionalPanel(
+      condition = "input.main_nav == 'species_loc_drilldown'",
+      uiOutput("conditional_tabset")
     ),
+    # uiOutput("conditional_tabset"),
+    # tabsetPanel(
+    #   id = "tab_selection",
+    #   !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
+    #     location <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i]
+    #     tabPanel(
+    #       title = location,
+    #       conditionalPanel(
+    #         condition = paste0("input.main_nav == 'species_loc_drilldown' && input.tab_selection == '", location, "'"),
+    #         plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner()
+    #       ),
+    #       br()
+    #     )
+    #   })
+    # ),
     
     uiOutput("filtered_data_ui")
   )),
@@ -504,6 +510,11 @@ server <- function(input, output, session) {
   # Reactive value to store the selected species code
   species_click <- reactiveVal(NULL) # Default species code
   file_click <- reactiveVal(NULL)
+  
+  # Send species_click to the client for conditional formatting in species-loc-drilldown
+  observe({
+    session$sendCustomMessage("species_click", species_click())
+  })
   
   observeEvent(session$clientData$url_hash, {
     fullHash <- session$clientData$url_hash # e.g., "#species_overview?species=cedwre"
@@ -1840,11 +1851,25 @@ server <- function(input, output, session) {
   
   output$species_title <- renderUI({
     name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
-    div(
-      p(h3(name_title)),
-      p(),
-      p(icon("circle-info"), strong("Select a bar from the plot to view data table."))
+    print(name_title)
+    print(species_click())
+    list(
+      if (is.null(species_click())) {
+        p(icon("circle-info"), strong("Select a species from the Species Lookup in the sidebar or make a 
+          selection from the Praire Haven Overview page."))
+      } else {
+        div(
+          p(h3(name_title)),
+          p(),
+          p(icon("circle-info"), strong("Select a bar from the plot to view data table."))
+        )
+      }
     )
+    # div(
+    #   p(h3(name_title)),
+    #   p(),
+    #   p(icon("circle-info"), strong("Select a bar from the plot to view data table."))
+    # )
   })
   
   output$allaboutbirds <- renderUI({
@@ -1869,6 +1894,25 @@ server <- function(input, output, session) {
       href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
                     species_click(), "&mediaType=audio&sort=rating_rank_desc")
     )
+  })
+  
+  output$conditional_tabset <- renderUI({
+    if (!is.null(species_click())) {
+      tabsetPanel(
+        id = "tab_selection",
+        !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
+          location <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i]
+          tabPanel(
+            title = location,
+            conditionalPanel(
+              condition = paste0("input.main_nav == 'species_loc_drilldown' && input.tab_selection == '", location, "'"),
+              plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner()
+            ),
+            br()
+          )
+        })
+      )
+    }
   })
   
 
