@@ -54,6 +54,11 @@ footer_text <- p("This project is powered by ",
                  tags$a("Prairie Haven", href = "https://www.earsinthedriftless.com/", target = "_blank")
                  )
 
+# Photo links:
+ph_overview_pic <- "https://www.prairiehaven.com/wp-content/uploads/2016/01/Sharp-shinned-Hawk-2-9-16-4.jpg"
+species_loc_pic <- "https://www.prairiehaven.com/wp-content/uploads/2009/03/ruffed-grouse-2.jpg"
+species_overview_pic <- "https://prairiehaven.com/uploads/img441049af98a2c.jpg"
+file_drilldown_pic <- "https://www.prairiehaven.com/wp-content/uploads/2009/03/orchard-oriole-young-male-5-08.jpg"
 
 ##############
 # Start Code #
@@ -216,22 +221,6 @@ ui <- bslib::page_navbar(
       condition = "input.main_nav == 'species_loc_drilldown'",
       uiOutput("conditional_tabset")
     ),
-    # uiOutput("conditional_tabset"),
-    # tabsetPanel(
-    #   id = "tab_selection",
-    #   !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
-    #     location <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i]
-    #     tabPanel(
-    #       title = location,
-    #       conditionalPanel(
-    #         condition = paste0("input.main_nav == 'species_loc_drilldown' && input.tab_selection == '", location, "'"),
-    #         plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner()
-    #       ),
-    #       br()
-    #     )
-    #   })
-    # ),
-    
     uiOutput("filtered_data_ui")
   )),
   
@@ -285,18 +274,25 @@ ui <- bslib::page_navbar(
         condition = "input.main_nav == 'species_overview'",
         uiOutput("species_title_overview")
       ),
-    fluidRow(
-      lapply(1:6, function(i){
-        column(width = 6,
-               conditionalPanel(
-                 condition = "input.main_nav == 'species_overview'",
-                 plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px")
-               )
-        )
-      })
+      
+      conditionalPanel(
+        condition = "input.main_nav == 'species_overview'",
+        uiOutput("conditional_species_plots")
+      )
     )
-  )
   ),
+  #   fluidRow(
+  #     lapply(1:6, function(i){
+  #       column(width = 6,
+  #              conditionalPanel(
+  #                condition = "input.main_nav == 'species_overview'",
+  #                plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px")
+  #              )
+  #       )
+  #     })
+  #   )
+  # )
+  # ),
   
   bslib::nav_panel(
     title = "File Analysis",
@@ -335,7 +331,8 @@ ui <- bslib::page_navbar(
             icon = icon("sliders"),
             conditionalPanel(
               condition = "input.main_nav == 'audio_file_overview'",
-              uiOutput("species_to_exclude")
+              uiOutput("species_to_exclude"),
+              uiOutput("species_file_filter")
             )
             # uiOutput("species_to_exclude")
           ),
@@ -412,25 +409,37 @@ ui <- bslib::page_navbar(
         )
       ),
       
-      verticalLayout(
+
         conditionalPanel(
           condition = "input.main_nav == 'audio_file_drilldown'",
-          plotOutput("file_wind_plot")
+          uiOutput("file_title")
         ),
-        conditionalPanel(
-          condition = "input.main_nav == 'audio_file_drilldown'",
-          plotOutput("file_temp_plot")
-        ),
-        conditionalPanel(
-          condition = "input.main_nav == 'audio_file_drilldown",
-          plotlyOutput("audio_file_drilldown_plot")
-        ),
-        p(),
-        conditionalPanel(
-          condition = "input.main_nav == 'audio_file_drilldown",
-          uiOutput("audio_file_drilldown_df")
+        
+        accordion(
+          open = TRUE,
+          accordion_panel(
+            "Weather Plots",
+            layout_columns(
+              plotOutput("file_wind_plot"),
+              plotOutput("file_temp_plot"),
+              col_widths = c(6, 6)
+            )
+          ),
+          accordion_panel(
+            "File Scatterplot",
+            conditionalPanel(
+              condition = "input.main_nav == 'audio_file_drilldown'",
+              plotlyOutput("audio_file_drilldown_plot")
+            )
+          ),
+          accordion_panel(
+            "File Details Table",
+            conditionalPanel(
+              condition = "input.main_nav == 'audio_file_drilldown'",
+              uiOutput("audio_file_drilldown_df")
+            )
+          )
         )
-      )
   )),
   
   footer = tagList(
@@ -495,6 +504,9 @@ ui <- bslib::page_navbar(
 "))
   )
 )
+  
+    
+
 
 
 
@@ -565,10 +577,8 @@ server <- function(input, output, session) {
     # If species_click() is defined, include it in the URL
     if (input$main_nav %in% c("species_overview", "species_loc_drilldown") && !is.null(species_click())) {
       pushQueryString <- paste0("#", input$main_nav, "?species=", species_click())
-      print(pushQueryString)
     } else if (input$main_nav == "audio_file_drilldown") {
       pushQueryString <- paste0("#", input$main_nav, "?file=", file_click())
-      print(pushQueryString)
     } else {
       pushQueryString <- paste0("#", input$main_nav)
     }
@@ -579,45 +589,6 @@ server <- function(input, output, session) {
     }
     
   }, priority = 0)
-  
-  # 
-  # observeEvent(species_click(), {
-  #   req(species_click())
-  #   req(input$main_nav)
-  #   req(input$main_nav %in% c("species_overview", "species_loc_drilldown"))
-  #   
-  #   current_nav <- isolate(input$main_nav)
-  #   print(paste("Current nav:", current_nav))
-  #   print("hi")
-  #   
-  #   print(input$species_loc_drilldown)
-  #   
-  #   common_name <- unique(all_data$Common.Name[all_data$Species.Code == species_click()])
-  #   
-  #   updateSelectizeInput(inputId = "species_lookup_location",
-  #                        selected = common_name)
-  #   
-  #   # Construct the new URL hash with species query
-  #   newHash <- paste0("#", input$main_nav, "?species=", species_click())
-  #   print(newHash)
-  #   
-  #   # Update the URL without reloading the app
-  #   updateQueryString(newHash, mode = "push", session = session)
-  #   
-  # })
-  
-  # observeEvent(file_click(), {
-  #   req(file_click())
-  #   req(input$main_nav)
-  #   req(input$main_nav == "audio_file_drilldown")
-  #   
-  #   # Construct new URL hash with audio file query
-  #   newHash <- paste0("#", input$main_nav, "?file=", file_click())
-  #   
-  #   # Update the URL without reloading the app
-  #   updateQueryString(newHash, mode = "push", session = session)
-  # })
-  
   
   ###############################################
   ## Application Build: Prairie Haven Overview ##
@@ -1175,16 +1146,13 @@ server <- function(input, output, session) {
   
   output$waiting_image <- renderUI({
     tagList(
-      p(),
-      p(strong("Waiting for you to select 'Generate Table' in the Sidebar")),
+      p(icon("circle-info"), strong("Waiting for you to select 'Generate Table' in the Sidebar")),
       div(
-        tags$img(src = "https://images.unsplash.com/photo-1526296609207-80e77afde33d?q=80&w=1980&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D",
-                 alt = "Tree Swallows",
+        tags$img(src = ph_overview_pic,
+                 alt = "Sharp Shinned Hawk",
                  style = "max-width: 100%; height: auto;"),
-        p("Photo by ", 
-          tags$a("Dulcey Lima", href = "https://unsplash.com/@dulceylima", target = "_blank"),
-          " on ",
-          tags$a("Unsplash", href = "https://unsplash.com", target = "_blank"),
+        p("Photo by Marcie O'Connor at ",
+          tags$a("Prairie Haven", href = "https://prairiehaven.com", target = "_blank"),
           style = "font-size: 12px; color: #666; margin-top: 5px;")
       )
     )
@@ -1246,6 +1214,7 @@ server <- function(input, output, session) {
   
   # Debounced species to exclude value
   debounced_species_exclude <- debounce(reactive(input$species_exclude), 500)
+  debounced_species_file_filter <- debounce(reactive(input$species_file_filter), 500)
   
   # Filtered data based on exclusion list
   cached_filtered_data <- reactiveVal(NULL)
@@ -1253,29 +1222,23 @@ server <- function(input, output, session) {
   observeEvent({
     filtered_data()
     debounced_species_exclude()
+    debounced_species_file_filter()
   }, {
     req(filtered_data(), debounced_species_exclude())
+    # Filter out species we want to exclude
     filtered <- filtered_data()[!(filtered_data()$Common.Name %in% debounced_species_exclude()),]
+    
+    # Identify files with specified species 
+    if (!is.null(debounced_species_file_filter())) {
+      files <- filtered[filtered$Common.Name %in% debounced_species_file_filter(),]$Begin.Path
+      filtered <- filtered[filtered$Begin.Path %in% files,]
+    }
+    
     cached_filtered_data(filtered)
-  })
+  }, ignoreNULL = FALSE)
   
   # Optimized pivot creator
   create_pivot_files <- function(df) {
-    
-    # First, get the top 3 species per file group
-    # top_species_df <- df %>%
-    #   group_by(Begin.Path, Common.Name) %>%
-    #   summarise(Species.Count = n(), .groups = "drop") %>%
-    #   arrange(Begin.Path, desc(Species.Count)) %>%
-    #   group_by(Begin.Path) %>%
-    #   slice_head(n = 1) %>%
-    #   mutate(Rank = paste0("Top.Species.", row_number())) %>%
-    #   select(Begin.Path, Rank, Common.Name) %>%
-    #   pivot_wider(
-    #     names_from = Rank,
-    #     values_from = Common.Name,
-    #     values_fill = NA
-    #   )
     
     find_audio_file_full <- function(row) {
       if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
@@ -1456,6 +1419,14 @@ server <- function(input, output, session) {
                    width = "400px")
   })
   
+  output$species_file_filter <- renderUI({
+    selectizeInput(inputId = "species_file_filter",
+                   label = "Filter Files by Species",
+                   choices = species_values,
+                   multiple = TRUE,
+                   width = "400px")
+  })
+  
   output$audio_file_pivot_view <- renderUI({
     tagList(
       p(icon("circle-info"), strong("Double click a row below to view file specific details")),
@@ -1578,24 +1549,47 @@ server <- function(input, output, session) {
     return(date_time)
   }
   
+  output$file_title <- renderUI({
+    if (isTRUE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      tagList(
+        p(icon("circle-info"), strong("Select a file from the File Lookup in the sidebar or make a 
+          selection from the File Analysis page.")),
+        div(
+          tags$img(src = file_drilldown_pic,
+                   alt = "Orchard Oriole",
+                   style = "max-width: 100%; height: auto;"),
+          p("Photo by Marcie O'Connor at",
+            tags$a("Prairie Haven", href = "https://prairiehaven.com", target = "_blank"),
+            style = "font-size: 12px; color: #666; margin-top: 5px;")
+        )
+      )
+    } else {
+      name_title <- file_click()
+      div(
+        p(h3(name_title))
+      )
+    }
+  })
+  
   output$file_wind_plot <- renderPlot({
     req(file_click())
     
-    date_time_start <- get_date_time(file_click())
-    date_time_end <- date_time_start + 3600
-    
-    plot_time_start <- date_time_start - 43200 # 12 hours before audio file
-    plot_time_end <- date_time_start + 43200 # 12 hours after audio file
-    
-    if (input$weather_context == "hour") {
-      plot_time_start <- date_time_start
-      plot_time_end <- date_time_end
-    }
-    
-    # Connect to SQLite database
-    con <- dbConnect(RSQLite::SQLite(), weather_path)
-    
-    wind_query <- "
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      date_time_start <- get_date_time(file_click())
+      date_time_end <- date_time_start + 3600
+      
+      plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+      plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+      
+      if (input$weather_context == "hour") {
+        plot_time_start <- date_time_start
+        plot_time_end <- date_time_end
+      }
+      
+      # Connect to SQLite database
+      con <- dbConnect(RSQLite::SQLite(), weather_path)
+      
+      wind_query <- "
     SELECT
       value AS windspeed,
       strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
@@ -1604,51 +1598,53 @@ server <- function(input, output, session) {
       time >= ? AND
       time < ?
   "
-    
-    wind <- dbGetQuery(con, wind_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
-    dbDisconnect(con)
-    
-    # Convert time back to POSIXct for ggplot
-    wind$time <- as.POSIXct(wind$time, tz = "UTC")
-    wind <- wind[format(as.POSIXct(wind$time), "%S") != "00",]
-    
-    # define region of audio file for plotting
-    regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
-    
-    ggplot(wind, aes(time, windspeed)) + 
-      geom_line(linewidth = 1) +
-      geom_rect(data = regions,
-                inherit.aes = FALSE,
-                mapping = aes(xmin = x1, xmax = x2,
-                              ymin = y1, ymax = y2,
-                              fill = "Audio File"),  # Just use a simple category name
-                color = "transparent",
-                alpha = 0.2) +
-      scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
-                        values = c("Audio File" = "#007bc2")) +
-      labs(title = "Wind Speed", x = "Date Time", y = "Wind Speed (mph)") +
-      theme_minimal() +
-      theme(legend.position = "bottom")
+      
+      wind <- dbGetQuery(con, wind_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+      dbDisconnect(con)
+      
+      # Convert time back to POSIXct for ggplot
+      wind$time <- as.POSIXct(wind$time, tz = "UTC")
+      wind <- wind[format(as.POSIXct(wind$time), "%S") != "00",]
+      
+      # define region of audio file for plotting
+      regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+      
+      ggplot(wind, aes(time, windspeed)) + 
+        geom_line(linewidth = 1) +
+        geom_rect(data = regions,
+                  inherit.aes = FALSE,
+                  mapping = aes(xmin = x1, xmax = x2,
+                                ymin = y1, ymax = y2,
+                                fill = "Audio File"),  # Just use a simple category name
+                  color = "transparent",
+                  alpha = 0.2) +
+        scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                          values = c("Audio File" = "#007bc2")) +
+        labs(title = "Wind Speed", x = "Date Time", y = "Wind Speed (mph)") +
+        theme_minimal() +
+        theme(legend.position = "bottom")
+    }
   })
   
   output$file_temp_plot <- renderPlot({
     req(file_click())
     
-    date_time_start <- get_date_time(file_click())
-    date_time_end <- date_time_start + 3600
-    
-    plot_time_start <- date_time_start - 43200 # 12 hours before audio file
-    plot_time_end <- date_time_start + 43200 # 12 hours after audio file
-    
-    if (input$weather_context == "hour") {
-      plot_time_start <- date_time_start
-      plot_time_end <- date_time_end
-    }
-    
-    # Connect to SQLite database
-    con <- dbConnect(RSQLite::SQLite(), weather_path)
-    
-    temp_query <- "
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      date_time_start <- get_date_time(file_click())
+      date_time_end <- date_time_start + 3600
+      
+      plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+      plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+      
+      if (input$weather_context == "hour") {
+        plot_time_start <- date_time_start
+        plot_time_end <- date_time_end
+      }
+      
+      # Connect to SQLite database
+      con <- dbConnect(RSQLite::SQLite(), weather_path)
+      
+      temp_query <- "
     SELECT
       value AS temp,
       strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
@@ -1657,68 +1653,72 @@ server <- function(input, output, session) {
       time >= ? AND
       time < ?
     "
-    temp <- dbGetQuery(con, temp_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
-    dbDisconnect(con)
-    
-    # Convert time back to POSIXct for ggplot
-    temp$time <- as.POSIXct(temp$time, tz = "UTC")
-    temp <- temp[format(as.POSIXct(temp$time), "%S") != "00",]
-    
-    # define region of audio file for plotting
-    regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
-    
-    ggplot(temp, aes(time, temp)) + 
-      geom_line(linewidth = 1) +
-      geom_rect(data = regions,
-                inherit.aes = FALSE,
-                mapping = aes(xmin = x1, xmax = x2,
-                              ymin = y1, ymax = y2,
-                              fill = "Audio File"),  # Just use a simple category name
-                color = "transparent",
-                alpha = 0.2) +
-      scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
-                        values = c("Audio File" = "#007bc2")) +
-      labs(title = "Temperature", x = "Date Time", y = "Temperature (°F)") +
-      theme_minimal() +
-      theme(legend.position = "bottom")
+      temp <- dbGetQuery(con, temp_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+      dbDisconnect(con)
+      
+      # Convert time back to POSIXct for ggplot
+      temp$time <- as.POSIXct(temp$time, tz = "UTC")
+      temp <- temp[format(as.POSIXct(temp$time), "%S") != "00",]
+      
+      # define region of audio file for plotting
+      regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+      
+      ggplot(temp, aes(time, temp)) + 
+        geom_line(linewidth = 1) +
+        geom_rect(data = regions,
+                  inherit.aes = FALSE,
+                  mapping = aes(xmin = x1, xmax = x2,
+                                ymin = y1, ymax = y2,
+                                fill = "Audio File"),  # Just use a simple category name
+                  color = "transparent",
+                  alpha = 0.2) +
+        scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                          values = c("Audio File" = "#007bc2")) +
+        labs(title = "Temperature", x = "Date Time", y = "Temperature (°F)") +
+        theme_minimal() +
+        theme(legend.position = "bottom")
+    }
   })
   
   
 
   
   output$audio_file_drilldown_plot <- renderPlotly({
-    file_details_plot_data <- file_details_data()
-    
-    p_file <- ggplot(file_details_plot_data, aes(x = Date.Time + as.numeric(Begin.Time..s.), y = Confidence)) +
-                geom_point(aes(color = factor(Common.Name))) +
-                labs(title = "File Details", x = "Time", y = "Confidence") +
-                # scale_x_time() +
-                theme_minimal()
-    
-    plotly_object <- ggplotly(p_file)
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      file_details_plot_data <- file_details_data()
+      
+      p_file <- ggplot(file_details_plot_data, aes(x = Date.Time + as.numeric(Begin.Time..s.), y = Confidence)) +
+        geom_point(aes(color = factor(Common.Name))) +
+        labs(title = "File Details", x = "Time", y = "Confidence") +
+        # scale_x_time() +
+        theme_minimal()
+      
+      plotly_object <- ggplotly(p_file)
+    }
   })
     
 
 
   output$audio_file_drilldown_df <- renderUI({
-    DT::renderDT(
-      datatable(file_details_data(),
-                escape = FALSE,
-                extensions = "FixedHeader",
-                selection = "none",
-                filter = "top",
-                rownames = FALSE,
-                fillContainer = TRUE,
-                options = list(
-                  fixedHeader = list(header = TRUE),
-                  columnDefs = list(list(visible = FALSE, 
-                                         targets = c("Begin.Time..s.", "End.Time..s.", "Species.Code", "Begin.Path", "Location", "Date", 
-                                                     "Date.Time", "Month", "Week", "avg_windspeed", 
-                                                     "avg_temperature"))),
-                  scrollY = 500, 
-                  scrollX = TRUE
-                ))
-    )
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      DT::renderDT(
+        datatable(file_details_data(),
+                  escape = FALSE,
+                  extensions = "FixedHeader",
+                  selection = "none",
+                  filter = "top",
+                  rownames = FALSE,
+                  fillContainer = TRUE,
+                  options = list(
+                    fixedHeader = list(header = TRUE),
+                    columnDefs = list(list(visible = FALSE, 
+                                           targets = c("Begin.Time..s.", "End.Time..s.", "Species.Code", "Begin.Path", "Location", "Date", 
+                                                       "Date.Time", "Month", "Week", "avg_windspeed", 
+                                                       "avg_temperature"))),
+                    scrollY = 500, 
+                    scrollX = TRUE
+                  ))
+      )}
   })
   
   
@@ -1740,8 +1740,40 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   output$species_title_overview <- renderUI({
-    name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
-    p(h3(name_title))
+    if (isTRUE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+      tagList(
+        p(icon("circle-info"), strong("Select a species from the Species Lookup in the sidebar or make a 
+          selection from the Praire Haven Overview page.")),
+        div(
+          tags$img(src = species_overview_pic,
+                   alt = "Northern Saw-whet Owl",
+                   # width = "800px",
+                   # height = "800px"),
+                   style = "max-width: 100%; max-height: 100%;"),
+          p("Photo by Marcie O'Connor at ",
+            tags$a("Prairie Haven", href = "https://www.prairiehaven.com", target = "_blank"),
+            style = "font-size: 12px; color: #666; margin-top: 5px;")
+        )
+      )
+    } else {
+      name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
+      p(h3(name_title))
+    }
+  })
+  
+  output$conditional_species_plots <- renderUI({
+    if (isFALSE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+      fluidRow(
+        lapply(1:6, function(i){
+          column(width = 6,
+                 conditionalPanel(
+                   condition = "input.main_nav == 'species_overview'",
+                   plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px")
+                 )
+          )
+        })
+      )
+    }
   })
   
   # Function for determining date range
@@ -1850,26 +1882,27 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   output$species_title <- renderUI({
-    name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
-    print(name_title)
-    print(species_click())
-    list(
-      if (is.null(species_click())) {
-        p(icon("circle-info"), strong("Select a species from the Species Lookup in the sidebar or make a 
-          selection from the Praire Haven Overview page."))
+      if (isTRUE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+        tagList(
+          p(icon("circle-info"), strong("Select a species from the Species Lookup in the sidebar or make a 
+          selection from the Praire Haven Overview page.")),
+          div(
+            tags$img(src = species_loc_pic,
+                     alt = "Ruffed Grouse",
+                     style = "max-width: 100%; height: auto;"),
+            p("Photo by Marcie O'Connor at ",
+              tags$a("Prairie Haven", href = "https://prairiehaven.com", target = "_blank"),
+              style = "font-size: 12px; color: #666; margin-top: 5px;")
+          )
+        )
       } else {
+        name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
         div(
           p(h3(name_title)),
           p(),
           p(icon("circle-info"), strong("Select a bar from the plot to view data table."))
         )
       }
-    )
-    # div(
-    #   p(h3(name_title)),
-    #   p(),
-    #   p(icon("circle-info"), strong("Select a bar from the plot to view data table."))
-    # )
   })
   
   output$allaboutbirds <- renderUI({
@@ -1897,7 +1930,7 @@ server <- function(input, output, session) {
   })
   
   output$conditional_tabset <- renderUI({
-    if (!is.null(species_click())) {
+    if (isFALSE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
       tabsetPanel(
         id = "tab_selection",
         !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
@@ -2229,12 +2262,20 @@ server <- function(input, output, session) {
     
     output$filtered_data_ui <- renderUI({
       req(selected_data())  # only show the table + spinner if there is selected data
+      
+      if (isFALSE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+        div(
+          p(),
+          p(icon("circle-info"), strong("Select sound button to view observation.")),
+          DT::dataTableOutput("filtered_data") %>% withSpinner()
+        ) 
+      }
 
-      div(
-        p(),
-        p(icon("circle-info"), strong("Select sound button to view observation.")),
-        DT::dataTableOutput("filtered_data") %>% withSpinner()
-      )
+      # div(
+      #   p(),
+      #   p(icon("circle-info"), strong("Select sound button to view observation.")),
+      #   DT::dataTableOutput("filtered_data") %>% withSpinner()
+      # )
     })
     
   })
