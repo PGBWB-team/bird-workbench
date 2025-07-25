@@ -54,11 +54,16 @@ footer_text <- p("This project is powered by ",
                  tags$a("Prairie Haven", href = "https://www.earsinthedriftless.com/", target = "_blank")
                  )
 
-# Photo links:
+# Photo links and text:
 ph_overview_pic <- "https://www.prairiehaven.com/wp-content/uploads/2016/01/Sharp-shinned-Hawk-2-9-16-4.jpg"
 species_loc_pic <- "https://www.prairiehaven.com/wp-content/uploads/2009/03/ruffed-grouse-2.jpg"
 species_overview_pic <- "https://prairiehaven.com/uploads/img441049af98a2c.jpg"
 file_drilldown_pic <- "https://www.prairiehaven.com/wp-content/uploads/2009/03/orchard-oriole-young-male-5-08.jpg"
+
+ph_overview_text <- "Waiting for you to select 'Generate Table' in the Sidebar"
+species_loc_text <- "Select a species from the Species Lookup in the sidebar or make a selection from the Praire Haven Overview page."
+species_overview_text <- "Select a species from the Species Lookup in the sidebar or make a selection from the Praire Haven Overview page."
+file_drilldown_text <- "Select a file from the File Lookup in the sidebar or make a selection from the File Analysis page."
 
 ##############
 # Start Code #
@@ -1146,7 +1151,7 @@ server <- function(input, output, session) {
   
   output$waiting_image <- renderUI({
     tagList(
-      p(icon("circle-info"), strong("Waiting for you to select 'Generate Table' in the Sidebar")),
+      p(icon("circle-info"), strong(ph_overview_text)),
       div(
         tags$img(src = ph_overview_pic,
                  alt = "Sharp Shinned Hawk",
@@ -1552,8 +1557,7 @@ server <- function(input, output, session) {
   output$file_title <- renderUI({
     if (isTRUE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
       tagList(
-        p(icon("circle-info"), strong("Select a file from the File Lookup in the sidebar or make a 
-          selection from the File Analysis page.")),
+        p(icon("circle-info"), strong(file_drilldown_text)),
         div(
           tags$img(src = file_drilldown_pic,
                    alt = "Orchard Oriole",
@@ -1742,8 +1746,7 @@ server <- function(input, output, session) {
   output$species_title_overview <- renderUI({
     if (isTRUE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
       tagList(
-        p(icon("circle-info"), strong("Select a species from the Species Lookup in the sidebar or make a 
-          selection from the Praire Haven Overview page.")),
+        p(icon("circle-info"), strong(species_overview_text)),
         div(
           tags$img(src = species_overview_pic,
                    alt = "Northern Saw-whet Owl",
@@ -1884,8 +1887,7 @@ server <- function(input, output, session) {
   output$species_title <- renderUI({
       if (isTRUE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
         tagList(
-          p(icon("circle-info"), strong("Select a species from the Species Lookup in the sidebar or make a 
-          selection from the Praire Haven Overview page.")),
+          p(icon("circle-info"), strong(species_loc_text)),
           div(
             tags$img(src = species_loc_pic,
                      alt = "Ruffed Grouse",
