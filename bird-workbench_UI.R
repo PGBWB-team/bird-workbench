@@ -88,13 +88,13 @@ ui <- bslib::page_navbar(
           id = "overview_accordion",
           open = TRUE,
           accordion_panel(
-            "Happiness Scale",
+            "Model-match Scale",
             icon = icon("filter"),
             tags$div(
               style = "position: relative; width: 86%; margin: 0 auto;",  # align block
               sliderInput(
                 inputId = "confidence_selection_overview",
-                label = "BirdNET Happiness Scale",
+                label = "BirdNET Model-match Scale",
                 min = 0,
                 max = 1,
                 value = c(0.7, 1),
@@ -162,13 +162,13 @@ ui <- bslib::page_navbar(
           id = "species_drilldown_accordion",
           open = FALSE,
           accordion_panel(
-            "Happiness Scale",
+            "Model-match Scale",
             icon = icon("filter"),
             tags$div(
               style = "position: relative; width: 86%; margin: 0 auto;",  # align block
               sliderInput(
                 inputId = "confidence_selection_drilldown",
-                label = "BirdNET Happiness Scale",
+                label = "BirdNET Model-match Scale",
                 min = 0,
                 max = 1,
                 value = c(0.7, 1),
@@ -240,13 +240,13 @@ ui <- bslib::page_navbar(
           id = "species_overview_accordion",
           open = FALSE,
           accordion_panel(
-            "Happiness Scale",
+            "Model-match Scale",
             icon = icon("filter"),
             tags$div(
               style = "position: relative; width: 86%; margin: 0 auto;",  # align block
               sliderInput(
                 inputId = "confidence_selection_species_overview",
-                label = "BirdNET Happiness Scale",
+                label = "Model-match Scale",
                 min = 0,
                 max = 1,
                 value = c(0.7, 1),
@@ -310,13 +310,13 @@ ui <- bslib::page_navbar(
           id = "file_overview_accordion",
           open = TRUE,
           accordion_panel(
-            "Happiness Scale",
+            "Model-match Scale",
             icon = icon("filter"),
             tags$div(
               style = "position: relative; width: 86%; margin: 0 auto;",  # align block
               sliderInput(
                 inputId = "confidence_selection_file_overview",
-                label = "BirdNET Happiness Scale",
+                label = "BirdNET Model-match Scale",
                 min = 0,
                 max = 1,
                 value = c(0.7, 1),
@@ -370,13 +370,13 @@ ui <- bslib::page_navbar(
           id = "file_drilldown_accordion",
           open = FALSE,
           accordion_panel(
-            "Happiness Scale",
+            "Model-match Scale",
             icon = icon("filter"),
             tags$div(
               style = "position: relative; width: 86%; margin: 0 auto;",  # align block
               sliderInput(
                 inputId = "confidence_selection_file_drilldown",
-                label = "BirdNET Happiness Scale",
+                label = "BirdNET Model-match Scale",
                 min = 0,
                 max = 1,
                 value = c(0.7, 1),
