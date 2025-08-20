@@ -18,6 +18,8 @@ library(shinyjs)
 library(glue)
 library(hms)
 library(shinycssloaders)
+library(DBI)
+library(RSQLite)
 
 #################################################
 # Set file path variables (Requires User Input) #
@@ -31,136 +33,423 @@ all_data <- fst::read_fst("C:/Users/laure/Dropbox/Prairie Haven/FST Output/fst_o
                                       "avg_windspeed", "avg_temperature", "Obs.Time"))
 
 # Set root folder for audio files
-
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
-tiny_shiny <- "enterpath"
+tiny_shiny <- "http://127.0.0.1:3271/?"
+
+# File path to SQL weather database
+weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
+
+
+footer_text <- p("This project is powered by ",
+                 tags$a("BirdNET Analyzer", href = "https://github.com/birdnet-team/BirdNET-Analyzer", target = "_blank"),
+                 ", ",
+                 tags$a("the R Project", href = "https://www.r-project.org/", target = "_blank"), 
+                 ", ",
+                 tags$a("PGBWB-team", href = "https://github.com/PGBWB-team/bird-workbench", target = "_blank"),
+                 ", ",
+                 tags$a("Shiny", href = "https://shiny.posit.co/", target = "_blank"), 
+                 ", and ",
+                 tags$a("Prairie Haven", href = "https://www.earsinthedriftless.com/", target = "_blank")
+                 )
+
+# Photo links and text:
+ph_overview_pic <- "https://www.prairiehaven.com/wp-content/uploads/2016/01/Sharp-shinned-Hawk-2-9-16-4.jpg"
+species_loc_pic <- "https://www.prairiehaven.com/wp-content/uploads/2009/03/ruffed-grouse-2.jpg"
+species_overview_pic <- "https://prairiehaven.com/uploads/img441049af98a2c.jpg"
+file_drilldown_pic <- "https://www.prairiehaven.com/wp-content/uploads/2009/03/orchard-oriole-young-male-5-08.jpg"
+
+ph_overview_text <- "Waiting for you to select 'Generate Table' in the Sidebar"
+species_loc_text <- "Select a species from the Species Lookup in the sidebar or make a selection from the Praire Haven Overview page."
+species_overview_text <- "Select a species from the Species Lookup in the sidebar or make a selection from the Praire Haven Overview page."
+file_drilldown_text <- "Select a file from the File Lookup in the sidebar or make a selection from the File Analysis page."
 
 ##############
 # Start Code #
 ##############
 
-ui <- navbarPage(
-  useShinyjs(),
+ui <- bslib::page_navbar(
+  header = useShinyjs(),
   theme = bs_theme(version = 5),
   id = "main_nav",
   title = "Pretty Good Bird Workbench",
   selected = "ph_overview",
-
-  # Shared sliderInput for confidence
-  div(
-    style = "margin-top: 20px;",
-    card(
-      height = "185px",
-      layout_sidebar(
-        sidebar = sidebar(p("BirdNET confidence scores are a 'unitless, numeric expression of BirdNET's confidence in its prediction' scaled from [0,1] and are not probabilities.
-                            Read more about what these values represent in: ", style = "font-size:13px; line-height:1;"),
-                          a("Guidelines for appropriate use of BirdNET scores and other detector outputs (Wood & Kahl, 2023)",
-                            href = "https://connormwood.com/wp-content/uploads/2024/02/wood-kahl-2024-guidelines-for-birdnet-scores.pdf",
-                            style = "font-size:13px; line-height:1;"),
-                          position = "right",
-                          width = "30%"),
-        tags$div(
-          style = "position: relative; width: 86%; margin: 0 auto;",  # align block
-          sliderInput(
-            inputId = "confidence_selection_overview",
-            label = "BirdNET Happiness Scale",
-            min = 0,
-            max = 1,
-            value = c(0.7, 1),
-            step = 0.01,
-            width = "100%"
+  
+  bslib::nav_panel(
+    title = "Prairie Haven Overview", 
+    value = "ph_overview",
+    layout_sidebar(
+      sidebar = sidebar(
+        width = "500px",
+        actionButton(inputId = "go", label = "Generate Table",
+                     width = "200px"),
+        bslib::accordion(
+          id = "overview_accordion",
+          open = TRUE,
+          accordion_panel(
+            "Model-match Scale",
+            icon = icon("filter"),
+            tags$div(
+              style = "position: relative; width: 86%; margin: 0 auto;",  # align block
+              sliderInput(
+                inputId = "confidence_selection_overview",
+                label = "BirdNET Model-match Scale",
+                min = 0,
+                max = 1,
+                value = c(0.7, 1),
+                step = 0.01,
+                width = "100%"
+              ),
+              tags$div(
+                style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
+                tags$span("Prepare for adventure"),
+                tags$span("Not bad"),
+                tags$span("Pretty good")
+              )
+            )
           ),
-          tags$div(
-            style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
-            tags$span("Prepare for adventure"),
-            tags$span("Not bad"),
-            tags$span("Pretty good")
-          )
+          accordion_panel(
+            "Species Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "species_lookup_overview",
+                           label = NULL,
+                           choices = unique(all_data$Common.Name),
+                           multiple = TRUE, 
+                           selected = NULL)
+          ),
+          accordion_panel(
+            "Pivot Table Selection",
+            icon = icon("table"),
+            selectInput(inputId = "sel_view",
+                        label = NULL,
+                        choices = list("Species by Month" = "by_month",
+                                       "Species by Location" = "by_location",
+                                       "Species by Year" = "by_year",
+                                       "Species by Week" = "by_week"),
+                        selected = "by_month")
+          ),
+          accordion_panel(
+            "Pivot Table Filters",
+            id = "pivot_filters",
+            icon = icon("sliders"),
+            conditionalPanel(
+              condition = "input.main_nav == 'ph_overview'",
+              uiOutput("overview_view") %>% withSpinner()
+            )
+            # uiOutput("overview_view") %>% withSpinner()
+          ),
+          p(),
+          footer_text
         )
+      ),
+      conditionalPanel(
+        condition = "input.main_nav == 'ph_overview'",
+        uiOutput("pivot_dt")
+      )
+      # uiOutput("pivot_dt") 
+    )
+  ),
+  
+  bslib::nav_panel(
+    title = "Species-Specific Location Drilldown",
+    value = "species_loc_drilldown",
+    layout_sidebar(
+      sidebar = sidebar(
+        width = "500px",
+        open = FALSE,
+        bslib::accordion(
+          id = "species_drilldown_accordion",
+          open = FALSE,
+          accordion_panel(
+            "Model-match Scale",
+            icon = icon("filter"),
+            tags$div(
+              style = "position: relative; width: 86%; margin: 0 auto;",  # align block
+              sliderInput(
+                inputId = "confidence_selection_drilldown",
+                label = "BirdNET Model-match Scale",
+                min = 0,
+                max = 1,
+                value = c(0.7, 1),
+                step = 0.01,
+                width = "100%"
+              ),
+              tags$div(
+                style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
+                tags$span("Prepare for adventure"),
+                tags$span("Not bad"),
+                tags$span("Pretty good")
+              )
+            )
+          ),
+          accordion_panel(
+            "Species Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "species_lookup_location",
+                           label = NULL,
+                           choices = unique(all_data$Common.Name),
+                           multiple = FALSE,
+                           selected = "Acadian Flycatcher")
+          ),
+          accordion_panel(
+            "Plot Settings",
+            icon = icon("chart-simple"),
+            radioButtons(
+              inputId = "time_interval",
+              label = "Time Interval",
+              choices = c("Week" = "weekly", "Month" = "monthly"),
+              selected = "weekly"
+            )
+          ),
+          accordion_panel(
+            "Cornell Ornithology Links",
+            icon = icon("crow"),
+            uiOutput("allaboutbirds",
+                     label = "All About Birds"),
+            p(),
+            uiOutput("macaulay",
+                     label = "Macaulay Library")
+          ),
+          p(),
+          footer_text
+      )
+      ),
+      
+
+    conditionalPanel(
+      condition = "input.main_nav == 'species_loc_drilldown'",
+      uiOutput("species_title")
+    ),
+    
+    conditionalPanel(
+      condition = "input.main_nav == 'species_loc_drilldown'",
+      uiOutput("conditional_tabset")
+    ),
+    uiOutput("filtered_data_ui")
+  )),
+  
+  bslib::nav_panel(
+    title = "Species-Specific Overview",
+    value = "species_overview",
+    layout_sidebar(
+      sidebar = sidebar(
+        width = "500px",
+        open = FALSE,
+        bslib::accordion(
+          id = "species_overview_accordion",
+          open = FALSE,
+          accordion_panel(
+            "Model-match Scale",
+            icon = icon("filter"),
+            tags$div(
+              style = "position: relative; width: 86%; margin: 0 auto;",  # align block
+              sliderInput(
+                inputId = "confidence_selection_species_overview",
+                label = "Model-match Scale",
+                min = 0,
+                max = 1,
+                value = c(0.7, 1),
+                step = 0.01,
+                width = "100%"
+              ),
+              tags$div(
+                style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
+                tags$span("Prepare for adventure"),
+                tags$span("Not bad"),
+                tags$span("Pretty good")
+              )
+            )
+          ),
+          accordion_panel(
+            "Species Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "species_lookup_species_overview",
+                           label = NULL,
+                           choices = unique(all_data$Common.Name),
+                           multiple = FALSE, 
+                           selected = "Acadian Flycatcher")
+          ),
+          p(),
+          footer_text
+        )
+      ),
+      
+      conditionalPanel(
+        condition = "input.main_nav == 'species_overview'",
+        uiOutput("species_title_overview")
+      ),
+      
+      conditionalPanel(
+        condition = "input.main_nav == 'species_overview'",
+        uiOutput("conditional_species_plots")
       )
     )
   ),
-
-  tabPanel(title = "Prairie Haven Overview", value = "ph_overview",
-           layout_columns(
-             card(
-               card_header("Pivot Table Selection"),
-               card_body(
-                 selectInput(inputId = "sel_view",
-                             label = NULL,
-                             choices = list("Species by Month" = "by_month",
-                                            "Species by Location" = "by_location",
-                                            "Species by Year" = "by_year",
-                                            "Species by Week" = "by_week"),
-                             selected = "by_month")
-               )
-             ),
-             card(
-               card_header("Additional Filters"),
-               card_body(
-                 uiOutput("overview_view") %>% withSpinner(),
-                 height = "300px"
-               )
-             ),
-             col_widths = c(4, 8)
-           ),
-           
-           actionButton(inputId = "go", label = "Generate Table",
-                        width = "200px"),
-           uiOutput("pivot_dt") 
-
+  #   fluidRow(
+  #     lapply(1:6, function(i){
+  #       column(width = 6,
+  #              conditionalPanel(
+  #                condition = "input.main_nav == 'species_overview'",
+  #                plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px")
+  #              )
+  #       )
+  #     })
+  #   )
+  # )
+  # ),
+  
+  bslib::nav_panel(
+    title = "File Analysis",
+    value = "audio_file_overview",
+    layout_sidebar(
+      sidebar = sidebar(
+        width = "500px",
+        open = TRUE,
+        bslib::accordion(
+          id = "file_overview_accordion",
+          open = TRUE,
+          accordion_panel(
+            "Model-match Scale",
+            icon = icon("filter"),
+            tags$div(
+              style = "position: relative; width: 86%; margin: 0 auto;",  # align block
+              sliderInput(
+                inputId = "confidence_selection_file_overview",
+                label = "BirdNET Model-match Scale",
+                min = 0,
+                max = 1,
+                value = c(0.7, 1),
+                step = 0.01,
+                width = "100%"
+              ),
+              tags$div(
+                style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
+                tags$span("Prepare for adventure"),
+                tags$span("Not bad"),
+                tags$span("Pretty good")
+              )
+            )
+          ),
+          accordion_panel(
+            "File Table Filters",
+            icon = icon("sliders"),
+            conditionalPanel(
+              condition = "input.main_nav == 'audio_file_overview'",
+              uiOutput("species_to_exclude"),
+              uiOutput("species_file_filter")
+            )
+            # uiOutput("species_to_exclude")
+          ),
+          p(),
+          footer_text
+        )
+      ),
+      
+      conditionalPanel(
+        condition = "input.main_nav == 'audio_file_overview'",
+        uiOutput("audio_player_full")
+      ),
+      conditionalPanel(
+        condition = "input.main_nav == 'audio_file_overview'",
+        uiOutput("audio_file_pivot_view")
+      )
+    # uiOutput("audio_player_full"),
+    # uiOutput("audio_file_pivot_view")
+  )
   ),
+  
+  bslib::nav_panel(
+    title = "File Drilldown",
+    value = "audio_file_drilldown",
+    layout_sidebar(
+      sidebar = sidebar(
+        width = "500px",
+        open = FALSE,
+        bslib::accordion(
+          id = "file_drilldown_accordion",
+          open = FALSE,
+          accordion_panel(
+            "Model-match Scale",
+            icon = icon("filter"),
+            tags$div(
+              style = "position: relative; width: 86%; margin: 0 auto;",  # align block
+              sliderInput(
+                inputId = "confidence_selection_file_drilldown",
+                label = "BirdNET Model-match Scale",
+                min = 0,
+                max = 1,
+                value = c(0.7, 1),
+                step = 0.01,
+                width = "100%"
+              ),
+              tags$div(
+                style = "display: flex; justify-content: space-between; font-size: 12px; margin-top: -10px;",
+                tags$span("Prepare for adventure"),
+                tags$span("Not bad"),
+                tags$span("Pretty good")
+              )
+            )
+          ),
+          accordion_panel(
+            "File Lookup",
+            icon = icon("magnifying-glass"),
+            selectizeInput(inputId = "file_lookup_drilldown",
+                           label = NULL,
+                           choices = NULL,
+                           multiple = FALSE)
+          ),
+          accordion_panel(
+            "Plot Settings",
+            icon = icon("chart-simple"),
+            radioButtons(
+              inputId = "weather_context",
+              label = "Weather Time Range",
+              choices = c("24 Hour Context" = "day", "1 Hour Context" = "hour"),
+              selected = "day"
+            )
+          ),
+          p(),
+          footer_text
+        )
+      ),
+      
 
-  tabPanel(title = "Species-Specific Location Drilldown",
-           value = "species_loc_drilldown",
-
-             card(
-               radioButtons(
-                 inputId = "time_interval",
-                 label = "Time Interval",
-                 choices = c("Week" = "weekly", "Month" = "monthly"),
-                 selected = "weekly"
-               )
-             ),
-
-           uiOutput("species_title"),
-           uiOutput("species_link"),
-
-           tabsetPanel(
-             id = "tab_selection",
-             !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
-               tabPanel(
-                 title = c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i],
-                 plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner(),
-                 br()
-               )
-             })
-           ),
-
-           uiOutput("filtered_data_ui")),
-
-
-  tabPanel(title = "Species-Specific Overview",
-           value = "species_overview",
-           uiOutput("species_title_overview"),
-           fluidRow(
-             lapply(1:6, function(i){
-               column(width = 6,
-                      plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px"))
-             })
-           )
-  ),
-
-  tabPanel(title = "File Analysis",
-           value = "audio_file_overview",
-           uiOutput("audio_player_full"),
-           uiOutput("audio_file_pivot_view")
-  ),
-
-  # Add your custom script for clearing Plotly selection
-  tags$script(HTML("
+        conditionalPanel(
+          condition = "input.main_nav == 'audio_file_drilldown'",
+          uiOutput("file_title")
+        ),
+        
+        accordion(
+          open = TRUE,
+          accordion_panel(
+            "Weather Plots",
+            layout_columns(
+              plotOutput("file_wind_plot"),
+              plotOutput("file_temp_plot"),
+              col_widths = c(6, 6)
+            )
+          ),
+          accordion_panel(
+            "File Scatterplot",
+            conditionalPanel(
+              condition = "input.main_nav == 'audio_file_drilldown'",
+              plotlyOutput("audio_file_drilldown_plot")
+            )
+          ),
+          accordion_panel(
+            "File Details Table",
+            conditionalPanel(
+              condition = "input.main_nav == 'audio_file_drilldown'",
+              uiOutput("audio_file_drilldown_df")
+            )
+          )
+        )
+  )),
+  
+  footer = tagList(
+    # Add your custom script for clearing Plotly selection
+    tags$script(HTML("
   Shiny.addCustomMessageHandler('plotly-clearSelection', function(plotId) {
     var plot = document.getElementById(plotId);
     if (plot) {
@@ -168,8 +457,8 @@ ui <- navbarPage(
     }
   });
 ")),
-  
-  tags$script(HTML("
+    
+    tags$script(HTML("
   $(document).on('dblclick', 'div[data-table-id] table tbody tr', function() {
     var wrapperDiv = $(this).closest('div[data-table-id]');
     var tableId = wrapperDiv.attr('data-table-id');
@@ -180,9 +469,9 @@ ui <- navbarPage(
     Shiny.setInputValue(tableId + '_dblclick', originalIndex, {priority: 'event'});
   });
 ")),
-
-  tags$head(
-    tags$style(HTML("
+    
+    tags$head(
+      tags$style(HTML("
     .navbar-nav {
       display: flex;
       justify-content: space-between;
@@ -197,19 +486,32 @@ ui <- navbarPage(
     .navbar-nav > li:last-child {
       order: 2;
     }
+    
+    # .footer {
+    #   position: absolute;
+    #   bottom: 0;
+    #   left: 0;
+    #   text-align:right;
+    #   width: 100%;
+    #   height:2.5rem;
+    # }
 
   "))
-  ),
-  
-  tags$style(HTML("
+    ),
+    
+    # tags$footer("This project is powered by BirdNET Analyzer and the R Project.", class = "footer"),
+    
+    tags$style(HTML("
   .lightblue {
     background-color: #007bc2 !important;
     color: white !important;
   }
 "))
-
-
   )
+)
+  
+    
+
 
 
 
@@ -220,9 +522,16 @@ server <- function(input, output, session) {
   #################
   # Disable table button on start
   shinyjs::addClass("go", "lightblue")
+
   
   # Reactive value to store the selected species code
-  species_click <- reactiveVal("acafly") # Default species code
+  species_click <- reactiveVal(NULL) # Default species code
+  file_click <- reactiveVal(NULL)
+  
+  # Send species_click to the client for conditional formatting in species-loc-drilldown
+  observe({
+    session$sendCustomMessage("species_click", species_click())
+  })
   
   observeEvent(session$clientData$url_hash, {
     fullHash <- session$clientData$url_hash # e.g., "#species_overview?species=cedwre"
@@ -232,13 +541,23 @@ server <- function(input, output, session) {
     queryString <- strsplit(fullHash, "\\?")[[1]][2]
     
     species <- NULL
-    if (!is.na(queryString)) {
+    file_name <- NULL
+    if (!is.na(queryString) & tab == "species_loc_drilldown") {
       params <- strsplit(queryString, "&")[[1]]
       params_list <- setNames(
         sapply(strsplit(params, "="), `[`, 2),
         sapply(strsplit(params, "="), `[`, 1)
       )
       species <- params_list[["species"]]
+    }
+    
+    if (!is.na(queryString) & tab == "audio_file_drilldown") {
+      params <- strsplit(queryString, "&")[[1]]
+      params_list <- setNames(
+        sapply(strsplit(params, "="), `[`, 2),
+        sapply(strsplit(params, "="), `[`, 1)
+      )
+      file_name <- params_list[["file"]]
     }
     
     if (!is.null(tab)) {
@@ -249,6 +568,11 @@ server <- function(input, output, session) {
     if (!is.null(species)) {
       species_click(species)
     }
+    
+    if (!is.null(file_name)) {
+      file_click(file_name)
+    }
+
   }, priority = 1)
   
   
@@ -258,6 +582,8 @@ server <- function(input, output, session) {
     # If species_click() is defined, include it in the URL
     if (input$main_nav %in% c("species_overview", "species_loc_drilldown") && !is.null(species_click())) {
       pushQueryString <- paste0("#", input$main_nav, "?species=", species_click())
+    } else if (input$main_nav == "audio_file_drilldown") {
+      pushQueryString <- paste0("#", input$main_nav, "?file=", file_click())
     } else {
       pushQueryString <- paste0("#", input$main_nav)
     }
@@ -266,21 +592,8 @@ server <- function(input, output, session) {
       freezeReactiveValue(input, "main_nav")  # avoid unnecessary reactivity loop
       updateQueryString(pushQueryString, mode = "push", session)
     }
+    
   }, priority = 0)
-  
-  
-  observeEvent(species_click(), {
-    req(species_click())
-    req(input$main_nav)
-    req(input$main_nav %in% c("species_overview", "species_loc_drilldown"))
-    
-    # Construct the new URL hash with species query
-    newHash <- paste0("#", input$main_nav, "?species=", species_click())
-    
-    # Update the URL without reloading the app
-    updateQueryString(newHash, mode = "push", session = session)
-  })
-  
   
   ###############################################
   ## Application Build: Prairie Haven Overview ##
@@ -297,6 +610,7 @@ server <- function(input, output, session) {
     first_day <- as.Date(paste0(year, "-01-01"))
     
     # Find the first Sunday of the year
+    first_sunday <- first_day + (7 - wday(first_day) + 1) %% 7
     
     # Calculate the difference in days between the given date and the first Sunday
     days_since_first_sunday <- as.integer(as.Date(date) - as.Date(first_sunday))
@@ -316,16 +630,56 @@ server <- function(input, output, session) {
       escape = FALSE,
       extensions = c("Buttons", "FixedHeader"),
       options = list(
-        dom = 'Bfrtip',
+        # Alternative: Custom positioning with div classes
+        dom = 'rt<"row"<"col-sm-4"f><"col-sm-4"B><"col-sm-4"i>>',
         ordering = TRUE,
-        buttons = c('csv', 'copy'),
+        buttons = list(
+          list(extend = 'csv', className = 'btn-sm'),
+          list(extend = 'copy', className = 'btn-sm')
+        ),
         page_length = nrow(data),
         lengthMenu = list(c(nrow(data)), c("All")),
         columnDefs = list(list(visible=FALSE, targets= c("Species.Code", "row_index"))),
-        fixedHeader = list(header = TRUE)
+        fixedHeader = list(header = TRUE),
+        scrollY = 500,
+        # Add custom CSS for styling
+        initComplete = JS(
+          "function(settings, json) {",
+          "  // Style the search input to be smaller",
+          "  $('.dataTables_filter input').css({",
+          "    'width': '200px',",
+          "    'height': '30px',",
+          "    'font-size': '12px'",
+          "  });",
+          "  // Style the search label",
+          "  $('.dataTables_filter label').css({",
+          "    'font-size': '12px',",
+          "    'font-weight': 'normal'",
+          "  });",
+          "  // Make buttons smaller",
+          "  $('.dt-buttons .btn').css({",
+          "    'font-size': '11px',",
+          "    'padding': '4px 8px',",
+          "    'margin': '2px'",
+          "  });",
+          "  // Style the info display to match other elements",
+          "  $('.dataTables_info').css({",
+          "    'font-size': '12px',",
+          "    'font-weight': 'normal',",
+          "    'padding-top': '8px',",
+          "    'margin': '0'",
+          "  });",
+          "  // Ensure all elements are vertically aligned",
+          "  $('.row > div').css({",
+          "    'display': 'flex',",
+          "    'align-items': 'center'",
+          "  });",
+          "}"
+        )
       ),
       rownames = FALSE,
-      selection = list(mode = "single", target = "row")
+      selection = list(mode = "single", target = "row"),
+      fillContainer = TRUE
     ) %>%
       formatStyle(
         "row_index",
@@ -349,8 +703,9 @@ server <- function(input, output, session) {
     return(dt)
   }
   
-  create_pivot_month <- function(df, yr_input = "All", loc_input = "All") {
+  create_pivot_month <- function(df, yr_input = "All", loc_input = "All", species_input = NULL) {
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       mutate(Month = factor(month.abb[lubridate::month(as.Date(Date))], levels = month.abb)) %>%
@@ -381,8 +736,9 @@ server <- function(input, output, session) {
     return(df)
   }
   
-  create_pivot_week <- function(df, yr_input = "All", loc_input = "All", week_sel, time_input = "All") {
+  create_pivot_week <- function(df, yr_input = "All", loc_input = "All", week_sel, time_input = "All", species_input = NULL) {
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
@@ -427,7 +783,7 @@ server <- function(input, output, session) {
     
   }
 
-  create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel) {
+  create_pivot_year <- function(df, loc_input = "All", month_sel, week_sel, species_input = NULL) {
     if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
       month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
                      "Aug", "Sep", "Oct", "Nov", "Dec")
@@ -438,6 +794,7 @@ server <- function(input, output, session) {
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     }
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (loc_input != "All") Location == loc_input else TRUE) %>%
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
       filter(Month %in% month_sel) %>%
@@ -472,7 +829,7 @@ server <- function(input, output, session) {
   }
 
 
-  create_pivot_location <- function(df, yr_input = "All", month_sel, week_sel) {
+  create_pivot_location <- function(df, yr_input = "All", month_sel, week_sel, species_input = NULL) {
     
     if (!identical(as.integer(week_sel), as.integer(c(1, 53)))) {
       month_sel <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -484,6 +841,7 @@ server <- function(input, output, session) {
     }
     
     df <- df %>%
+      filter(if (!is.null(species_input)) Common.Name %in% species_input else TRUE) %>%
       filter(if (yr_input != "All") lubridate::year(as.Date(Date)) == yr_input else TRUE) %>% 
       filter(Week >= week_sel[1] & Week <= week_sel[2]) %>%
       filter(Month %in% month_sel) %>%
@@ -510,27 +868,65 @@ server <- function(input, output, session) {
     return(data)
   } 
   
-  default_confidence <- c(0.7, 1)
+ 
   filtered_data <- reactiveVal(NULL)
-  
-  # Run default filtering on app load
-  observeEvent(all_data, {
-    filtered_data(confidence_filter(all_data, default_confidence))
-  }, once = TRUE)
-  
-  
-  debounced_conf <- debounce(reactive(input$confidence_selection_overview), 2000)
   
   slider_touched <- reactiveVal(FALSE)
   pivot_ready <- reactiveVal(TRUE) 
   
-  # Disable the generate table button when confidence value changes
+  # Add this at the top of your server function
+  confidence_value <- reactiveVal(c(0.7, 1))  # Single source of truth
+  
+  # Replace your existing debounced_conf with:
+  debounced_conf <- debounce(confidence_value, 2000)
+  
+  # Run default filtering on app load
+  observeEvent(all_data, {
+    filtered_data(confidence_filter(all_data, confidence_value()))
+  }, once = TRUE)
+  
+  # Add observers for each slider to update the central reactive value
   observeEvent(input$confidence_selection_overview, {
+    confidence_value(input$confidence_selection_overview)
     slider_touched(TRUE)
     shinyjs::disable("go")
   }, ignoreInit = TRUE)
   
-  # Filter data based on happiness slider
+  observeEvent(input$confidence_selection_drilldown, {
+    confidence_value(input$confidence_selection_drilldown)
+    slider_touched(TRUE)
+    shinyjs::disable("go")
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$confidence_selection_species_overview, {
+    confidence_value(input$confidence_selection_species_overview)
+    slider_touched(TRUE)
+    shinyjs::disable("go")
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$confidence_selection_file_overview, {
+    confidence_value(input$confidence_selection_file_overview)
+    slider_touched(TRUE)
+    shinyjs::disable("go")
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$confidence_selection_file_drilldown, {
+    confidence_value(input$confidence_selection_file_drilldown)
+    slider_touched(TRUE)
+    shinyjs::disable("go")
+  }, ignoreInit = TRUE)
+  
+  # Add observers to keep all sliders in sync
+  observeEvent(confidence_value(), {
+    updateSliderInput(session, "confidence_selection_overview", value = confidence_value())
+    updateSliderInput(session, "confidence_selection_drilldown", value = confidence_value())
+    updateSliderInput(session, "confidence_selection_species_overview", value = confidence_value())
+    updateSliderInput(session, "confidence_selection_file_overview", value = confidence_value())
+    updateSliderInput(session, "confidence_selection_file_drilldown", value = confidence_value())
+    
+  }, ignoreInit = TRUE)
+  
+
   observe({
     req(all_data)
     req(slider_touched() == TRUE)
@@ -547,13 +943,14 @@ server <- function(input, output, session) {
   
   observeEvent(input$sel_view, {
     pivot_ready(FALSE)
+    # accordion_panel_open("overview_accordion", values = "pivot_filters")
     shinyjs::enable("go")
     shinyjs::addClass("go", "lightblue")
     shinyjs::html("go", "Generate Table")
   })
 
   observeEvent({
-    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel, input$time_sel)
+    list(input$year_sel, input$loc_sel, input$month_sel, input$week_sel, input$time_sel, input$species_lookup_overview)
     }, {
     shinyjs::enable("go")
     shinyjs::addClass("go", "lightblue")
@@ -571,7 +968,7 @@ server <- function(input, output, session) {
     req(input$loc_sel)
     req(filtered_data())
     
-    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel)
+    create_pivot_month(filtered_data(), input$year_sel, input$loc_sel, input$species_lookup_overview)
   })
   
   species_by_location <- eventReactive(input$go, {
@@ -579,7 +976,7 @@ server <- function(input, output, session) {
     req(input$week_sel)
     req(filtered_data())
     
-    create_pivot_location(filtered_data(), input$year_sel, input$month_sel, input$week_sel)
+    create_pivot_location(filtered_data(), input$year_sel, input$month_sel, input$week_sel, input$species_lookup_overview)
   })
   
   species_by_year <- eventReactive(input$go, {
@@ -587,7 +984,7 @@ server <- function(input, output, session) {
     req(input$week_sel)
     req(filtered_data())
     
-    create_pivot_year(filtered_data(), input$loc_sel, input$month_sel, input$week_sel)
+    create_pivot_year(filtered_data(), input$loc_sel, input$month_sel, input$week_sel, input$species_lookup_overview)
   })
   
   species_by_week <- eventReactive(input$go, {
@@ -597,8 +994,9 @@ server <- function(input, output, session) {
     req(input$time_sel)
     req(filtered_data())
     
-    create_pivot_week(filtered_data(), input$year_sel,input$loc_sel, input$week_sel, input$time_sel)
+    create_pivot_week(filtered_data(), input$year_sel,input$loc_sel, input$week_sel, input$time_sel, input$species_lookup_overview)
   })
+  
   
   # Table rendering
   output$species_by_month_pivot <- DT::renderDT({
@@ -649,66 +1047,50 @@ server <- function(input, output, session) {
     
     if (input$sel_view == "by_month") {
       tagList(
-        layout_columns(
-          selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-          selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
-          col_widths = c(6, 6)
-        )
+        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All")
       )
 
     } else if (input$sel_view =="by_location") {
       tagList(
-        layout_columns(
-          selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-          selectInput("month_sel", label = "Month Selection", 
-                      choices = month_choices(), 
-                      selected = month_choices(),
-                      multiple = TRUE),
-          sliderInput("week_sel", label = "Week Selection",
-                      min = 1,
-                      max = 53,
-                      value = c(1, 53),
-                      step = 1),
-          p(em("Note that week selection overrides month selection."), style = "font-size: 12px;"),
-          col_widths = (c(4, 8,
-                          -4, 8,
-                          -4, 8))
-        )
+        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+        selectInput("month_sel", label = "Month Selection", 
+                    choices = month_choices(), 
+                    selected = month_choices(),
+                    multiple = TRUE),
+        sliderInput("week_sel", label = "Week Selection",
+                    min = 1,
+                    max = 53,
+                    value = c(1, 53),
+                    step = 1),
+        p(em("Note that week selection overrides month selection."), style = "font-size: 12px;")
       )
       
     } else if (input$sel_view == "by_year") {
       tagList(
-        layout_columns(
-          selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
-          selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
-                      multiple = TRUE),
-          sliderInput("week_sel", label = "Week Selection",
-                      min = 1,
-                      max = 53,
-                      value = c(1, 53),
-                      step = 1),
-          p(em("Note that week selection overrides month selection."), style = "font-size: 12px;"),
-          col_widths = c(4, 8,
-                         -4, 8,
-                         -4, 8)
-        ),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
+        selectInput("month_sel", label = "Month Selection", choices = month_choices(), selected = month_choices(),
+                    multiple = TRUE),
+        sliderInput("week_sel", label = "Week Selection",
+                    min = 1,
+                    max = 53,
+                    value = c(1, 53),
+                    step = 1),
+        p(em("Note that week selection overrides month selection."), style = "font-size: 12px;")
       )
+      
     } else if (input$sel_view == "by_week") {
       tagList(
-        layout_columns(
-          selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
-          selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
-          selectInput("time_sel", label = "Time Selection", 
-                      choices = c("Morning", "Afternoon", "Night", "All"), 
-                      selected = "All"),
-          sliderInput("week_sel", label = "Week Selection",
-                      min = 1,
-                      max = 53,
-                      value = c(1, 53),
-                      step = 1),
-          col_widths = c(4, 4, 4, 
-                         12)
-        ),
+        selectInput("loc_sel", label = "Location Selection", choices = loc_choices(), selected = "All"),
+        selectInput("year_sel", label = "Year Selection", choices = year_choices(), selected = "All"),
+        selectInput("time_sel", label = "Time Selection", 
+                    choices = c("Morning", "Afternoon", "Night", "All"), 
+                    selected = "All"),
+        sliderInput("week_sel", label = "Week Selection",
+                    min = 1,
+                    max = 53,
+                    value = c(1, 53),
+                    step = 1),
         p(em(tagList("This week is ", strong("Week ", style = "font-size: 12px; color: #007bc2;"), 
                      strong(get_week_from_date(Sys.time()), style = "font-size: 12px; color: #007bc2;"))), style = "font-size: 12px;")
       )
@@ -717,35 +1099,67 @@ server <- function(input, output, session) {
   
   output$pivot_dt <- renderUI({
     req(input$sel_view)
-    req(pivot_ready() == TRUE)
     list(
-      p(),
-      p(icon("circle-info"), strong("Double click a row below to view species specific details")),
-      if (input$sel_view == "by_month") {
-        div(
-          id = "species_by_month_pivot_wrapper",
-          `data-table-id` = "species_by_month_pivot",
-          DT::dataTableOutput("species_by_month_pivot") 
+      if (pivot_ready() != TRUE) {
+        p("Click the Generate Table Button in the Sidebar to View Table")
+        uiOutput("waiting_image")
+        
+      } else if (input$sel_view == "by_month") {
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_month_pivot_wrapper",
+            `data-table-id` = "species_by_month_pivot",
+            DT::dataTableOutput("species_by_month_pivot") 
+          )
         )
       } else if (input$sel_view == "by_location") {
-        div(
-          id = "species_by_location_pivot_wrapper",
-          `data-table-id` = "species_by_location_pivot",
-          DT::dataTableOutput("species_by_location_pivot") 
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_location_pivot_wrapper",
+            `data-table-id` = "species_by_location_pivot",
+            DT::dataTableOutput("species_by_location_pivot") 
+          )
         )
       } else if (input$sel_view == "by_year") {
-        div(
-          id = "species_by_year_pivot_wrapper",
-          `data-table-id` = "species_by_year_pivot",
-          DT::dataTableOutput("species_by_year_pivot") 
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_year_pivot_wrapper",
+            `data-table-id` = "species_by_year_pivot",
+            DT::dataTableOutput("species_by_year_pivot") 
+          )
         )
+        
       } else if (input$sel_view == "by_week") {
-        div(
-          id = "species_by_week_pivot_wrapper",
-          `data-table-id` = "species_by_week_pivot",
-          DT::dataTableOutput("species_by_week_pivot")
+        tagList(
+          p(),
+          p(icon("circle-info"), strong("Double click a row below to view species specific details")),
+          div(
+            id = "species_by_week_pivot_wrapper",
+            `data-table-id` = "species_by_week_pivot",
+            DT::dataTableOutput("species_by_week_pivot")
+          )
         )
       }
+    )
+  })
+  
+  output$waiting_image <- renderUI({
+    tagList(
+      p(icon("circle-info"), strong(ph_overview_text)),
+      div(
+        tags$img(src = ph_overview_pic,
+                 alt = "Sharp Shinned Hawk",
+                 style = "max-width: 100%; height: auto;"),
+        p("Photo by Marcie O'Connor at ",
+          tags$a("Prairie Haven", href = "https://prairiehaven.com", target = "_blank"),
+          style = "font-size: 12px; color: #666; margin-top: 5px;")
+      )
     )
   })
   
@@ -805,6 +1219,7 @@ server <- function(input, output, session) {
   
   # Debounced species to exclude value
   debounced_species_exclude <- debounce(reactive(input$species_exclude), 500)
+  debounced_species_file_filter <- debounce(reactive(input$species_file_filter), 500)
   
   # Filtered data based on exclusion list
   cached_filtered_data <- reactiveVal(NULL)
@@ -812,29 +1227,23 @@ server <- function(input, output, session) {
   observeEvent({
     filtered_data()
     debounced_species_exclude()
+    debounced_species_file_filter()
   }, {
     req(filtered_data(), debounced_species_exclude())
+    # Filter out species we want to exclude
     filtered <- filtered_data()[!(filtered_data()$Common.Name %in% debounced_species_exclude()),]
+    
+    # Identify files with specified species 
+    if (!is.null(debounced_species_file_filter())) {
+      files <- filtered[filtered$Common.Name %in% debounced_species_file_filter(),]$Begin.Path
+      filtered <- filtered[filtered$Begin.Path %in% files,]
+    }
+    
     cached_filtered_data(filtered)
-  })
+  }, ignoreNULL = FALSE)
   
   # Optimized pivot creator
   create_pivot_files <- function(df) {
-    
-    # First, get the top 3 species per file group
-    top_species_df <- df %>%
-      group_by(Begin.Path, Common.Name) %>%
-      summarise(Species.Count = n(), .groups = "drop") %>%
-      arrange(Begin.Path, desc(Species.Count)) %>%
-      group_by(Begin.Path) %>%
-      slice_head(n = 1) %>%
-      mutate(Rank = paste0("Top.Species.", row_number())) %>%
-      select(Begin.Path, Rank, Common.Name) %>%
-      pivot_wider(
-        names_from = Rank,
-        values_from = Common.Name,
-        values_fill = NA
-      )
     
     find_audio_file_full <- function(row) {
       if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
@@ -874,7 +1283,7 @@ server <- function(input, output, session) {
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
       mutate(Year = as.character(lubridate::year(Date))) %>%
       mutate(Month = as.character(lubridate::month(Date, label = TRUE, abbr = FALSE))) %>%
-      left_join(top_species_df, by = "Begin.Path") %>%
+      # left_join(top_species_df, by = "Begin.Path") %>%
       rowwise() %>%
       mutate(Play.Audio = {
         audio_id <- find_audio_file_full(pick(everything()))
@@ -914,11 +1323,14 @@ server <- function(input, output, session) {
                Score >= 0.2 & Score < 0.3 ~ "#cee2f3",
                Score >= 0.1 & Score < 0.2 ~ "#e7f0f9",
                Score < 0.1 ~ "#ffffff"               
-             )) %>%
+             ))
+    df_all_cols$row_index <- seq_len(nrow(df_all_cols))
+    df_all_cols <- df_all_cols %>%
       select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species, 
              Location, Date, Year, Month, Time, Time.Of.Day, 
              Mean.Confidence, avg_temperature, avg_windspeed,
-             Top.Species.1, Score, Score_Color)
+             # Top.Species.1, 
+             Score, Score_Color, row_index)
 
     return(df_all_cols)
   }
@@ -930,48 +1342,104 @@ server <- function(input, output, session) {
   })
   
   # Render the pivot table
-  output$file_list_pivot <- DT::renderDT(
-    {
+  output$file_list_pivot <- DT::renderDT({
     datatable(file_list(),
               escape = FALSE,
               extensions = c("Buttons", "FixedHeader"),
               filter = "top",
-              class = "row-border",
-              options = list(
-                dom = "Blfrtip",
-                ordering = TRUE,
-                buttons = c("csv", "copy"),
-                pageLength = 100,
-                lengthMenu = list(c(25, 50, 100),
-                                  c('25', '50', '100')),
-                paging = TRUE,
-                fixedHeader = list(header = TRUE),
-                columnDefs = list(list(visible=FALSE, targets= "Score_Color"))
-              ),
               rownames = FALSE,
               colnames = c("# Obs" = "Number.Observations", "# Unique Species" = "Number.Unique.Species",
                            "Time of Day" = "Time.Of.Day", "File Name" = "Begin.Path",
                            "Mean Conf" = "Mean.Confidence", 
                            "Wind Speed" = "avg_windspeed", "Temperature" = "avg_temperature"),
-              selection = "single") %>%
-        formatStyle("Score",
-                    valueColumns = "Score_Color",
-                    target = "cell",
-                    backgroundColor = JS("value")) 
-      
-    }) 
+              fillContainer = TRUE,
+              selection = "single",
+              # class = "row-border",
+              options = list(
+                # dom = "Blfrtip",
+                dom = 'lrt<"row"<"col-sm-4"f><"col-sm-4"B><"col-sm-4"i>>p',
+                ordering = TRUE,
+                buttons = list(
+                  list(extend = 'csv', className = 'btn-sm'),
+                  list(extend = 'copy', className = 'btn-sm')
+                ),
+                pageLength = 100,
+                lengthMenu = list(c(25, 50, 100),
+                                  c('25', '50', '100')),
+                paging = TRUE,
+                fixedHeader = list(header = TRUE),
+                scrollY = 500,
+                scrollX = TRUE,
+                columnDefs = list(list(visible=FALSE, targets= c("Score_Color", "row_index"))),
+                # Add custom CSS for styling
+                initComplete = JS(
+                  "function(settings, json) {",
+                  "  // Style the search input to be smaller",
+                  "  $('.dataTables_filter input').css({",
+                  "    'width': '200px',",
+                  "    'height': '30px',",
+                  "    'font-size': '12px'",
+                  "  });",
+                  "  // Style the search label",
+                  "  $('.dataTables_filter label').css({",
+                  "    'font-size': '12px',",
+                  "    'font-weight': 'normal'",
+                  "  });",
+                  "  // Make buttons smaller",
+                  "  $('.dt-buttons .btn').css({",
+                  "    'font-size': '11px',",
+                  "    'padding': '4px 8px',",
+                  "    'margin': '2px'",
+                  "  });",
+                  "  // Style the info display to match other elements",
+                  "  $('.dataTables_info').css({",
+                  "    'font-size': '12px',",
+                  "    'font-weight': 'normal',",
+                  "    'padding-top': '8px',",
+                  "    'margin': '0'",
+                  "  });",
+                  "  // Ensure all elements are vertically aligned",
+                  "  $('.row > div').css({",
+                  "    'display': 'flex',",
+                  "    'align-items': 'center'",
+                  "  });",
+                  "}"
+                ))
+              ) %>%
+                formatStyle("Score",
+                            valueColumns = "Score_Color",
+                            target = "cell",
+                            backgroundColor = JS("value"))
+  }) 
   
   
   # UI for species exclusion and table display 
+  
+  output$species_to_exclude <- renderUI({
+    selectizeInput(inputId = "species_exclude",
+                   label = "Species to Exclude",
+                   choices = species_values,
+                   selected = default_species_vals,
+                   multiple = TRUE,
+                   width = "400px")
+  })
+  
+  output$species_file_filter <- renderUI({
+    selectizeInput(inputId = "species_file_filter",
+                   label = "Filter Files by Species",
+                   choices = species_values,
+                   multiple = TRUE,
+                   width = "400px")
+  })
+  
   output$audio_file_pivot_view <- renderUI({
     tagList(
-      selectizeInput(inputId = "species_exclude",
-                     label = "Species to Exclude",
-                     choices = species_values,
-                     selected = default_species_vals,
-                     multiple = TRUE,
-                     width = "400px"),
-      DT::dataTableOutput("file_list_pivot") %>% withSpinner()
+      p(icon("circle-info"), strong("Double click a row below to view file specific details")),
+      div(
+        id = "file_list_pivot_wrapper",
+        `data-table-id` = "file_list_pivot",
+        DT::dataTableOutput("file_list_pivot") %>% withSpinner()
+      )
     )
   })
 
@@ -1015,13 +1483,300 @@ server <- function(input, output, session) {
     })
   })
   
+  observeEvent(input$file_list_pivot_dblclick, {
+    selected_row <- input$file_list_pivot_dblclick
+    if (!is.null(selected_row) && length(selected_row) > 0) {
+      file_list_df <- file_list()
+      if (selected_row[1] <= nrow(file_list_df)) {
+        file_click(file_list_df$Begin.Path[selected_row[1]])
+        updateNavbarPage(session, "main_nav", selected = "audio_file_drilldown")
+      }
+    }
+  })
+  
+  #############################################
+  ## Applictaion Build: Audio File Drilldown ##
+  #############################################
+  
+  # Server side selection options because there are a lot. 
+  updateSelectizeInput(session, "file_lookup_drilldown", choices = c("Default", unique(all_data$Begin.Path)), selected = "Default", server = TRUE)
+  
+  # If a user manually searches for a species, update the species_click() reactive val
+  observeEvent(input$file_lookup_drilldown, {
+    file_name <- input$file_lookup_drilldown
+    
+    if (file_name != "Default"){
+      file_click(file_name)
+    }
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?file=", file_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+    
+  }, ignoreInit = TRUE)
+  
+  
+  file_details_data <- reactiveVal(NULL)
+  
+  observe({
+    req(filtered_data())
+    req(!is.null(file_click()))
+    
+    file_details_dt <- subset(filtered_data(), Begin.Path == file_click())
+    file_details_dt <- file_details_dt %>%
+      rowwise() %>%
+      mutate(Sound.Button = list({
+        url_val <- find_audio_file(.data)
+        if (!is.null(url_val)) {
+          paste0(
+            '<a class="btn btn-primary" target="_blank" href="',
+            url_val,
+            '">Open Observation</a>'
+          )
+        } else {
+          "No Audio Available"
+        }
+      }))
+    
+    file_details_data(file_details_dt)
+  })
+  
+  get_date_time <- function(file_nm) {
+    if (is.null(file_nm) || file_nm == "") {
+      return(NULL)
+    }
+    
+    date <- unlist(strsplit(basename(file_nm), split = "_"))[2]
+    time <- substr(unlist(strsplit(basename(file_nm), split = "_"))[3], start = 1, stop = 6)
+    date_time <- ymd_hms(paste(date, time), tz="UTC")
+    return(date_time)
+  }
+  
+  output$file_title <- renderUI({
+    if (isTRUE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      tagList(
+        p(icon("circle-info"), strong(file_drilldown_text)),
+        div(
+          tags$img(src = file_drilldown_pic,
+                   alt = "Orchard Oriole",
+                   style = "max-width: 100%; height: auto;"),
+          p("Photo by Marcie O'Connor at",
+            tags$a("Prairie Haven", href = "https://prairiehaven.com", target = "_blank"),
+            style = "font-size: 12px; color: #666; margin-top: 5px;")
+        )
+      )
+    } else {
+      name_title <- file_click()
+      div(
+        p(h3(name_title))
+      )
+    }
+  })
+  
+  output$file_wind_plot <- renderPlot({
+    req(file_click())
+    
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      date_time_start <- get_date_time(file_click())
+      date_time_end <- date_time_start + 3600
+      
+      plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+      plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+      
+      if (input$weather_context == "hour") {
+        plot_time_start <- date_time_start
+        plot_time_end <- date_time_end
+      }
+      
+      # Connect to SQLite database
+      con <- dbConnect(RSQLite::SQLite(), weather_path)
+      
+      wind_query <- "
+    SELECT
+      value AS windspeed,
+      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
+    FROM windSpeed
+    WHERE
+      time >= ? AND
+      time < ?
+  "
+      
+      wind <- dbGetQuery(con, wind_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+      dbDisconnect(con)
+      
+      # Convert time back to POSIXct for ggplot
+      wind$time <- as.POSIXct(wind$time, tz = "UTC")
+      wind <- wind[format(as.POSIXct(wind$time), "%S") != "00",]
+      
+      # define region of audio file for plotting
+      regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+      
+      ggplot(wind, aes(time, windspeed)) + 
+        geom_line(linewidth = 1) +
+        geom_rect(data = regions,
+                  inherit.aes = FALSE,
+                  mapping = aes(xmin = x1, xmax = x2,
+                                ymin = y1, ymax = y2,
+                                fill = "Audio File"),  # Just use a simple category name
+                  color = "transparent",
+                  alpha = 0.2) +
+        scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                          values = c("Audio File" = "#007bc2")) +
+        labs(title = "Wind Speed", x = "Date Time", y = "Wind Speed (mph)") +
+        theme_minimal() +
+        theme(legend.position = "bottom")
+    }
+  })
+  
+  output$file_temp_plot <- renderPlot({
+    req(file_click())
+    
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      date_time_start <- get_date_time(file_click())
+      date_time_end <- date_time_start + 3600
+      
+      plot_time_start <- date_time_start - 43200 # 12 hours before audio file
+      plot_time_end <- date_time_start + 43200 # 12 hours after audio file
+      
+      if (input$weather_context == "hour") {
+        plot_time_start <- date_time_start
+        plot_time_end <- date_time_end
+      }
+      
+      # Connect to SQLite database
+      con <- dbConnect(RSQLite::SQLite(), weather_path)
+      
+      temp_query <- "
+    SELECT
+      value AS temp,
+      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
+    FROM outdoorTemperature
+    WHERE 
+      time >= ? AND
+      time < ?
+    "
+      temp <- dbGetQuery(con, temp_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+      dbDisconnect(con)
+      
+      # Convert time back to POSIXct for ggplot
+      temp$time <- as.POSIXct(temp$time, tz = "UTC")
+      temp <- temp[format(as.POSIXct(temp$time), "%S") != "00",]
+      
+      # define region of audio file for plotting
+      regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
+      
+      ggplot(temp, aes(time, temp)) + 
+        geom_line(linewidth = 1) +
+        geom_rect(data = regions,
+                  inherit.aes = FALSE,
+                  mapping = aes(xmin = x1, xmax = x2,
+                                ymin = y1, ymax = y2,
+                                fill = "Audio File"),  # Just use a simple category name
+                  color = "transparent",
+                  alpha = 0.2) +
+        scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
+                          values = c("Audio File" = "#007bc2")) +
+        labs(title = "Temperature", x = "Date Time", y = "Temperature (°F)") +
+        theme_minimal() +
+        theme(legend.position = "bottom")
+    }
+  })
+  
+  
+
+  
+  output$audio_file_drilldown_plot <- renderPlotly({
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      file_details_plot_data <- file_details_data()
+      
+      p_file <- ggplot(file_details_plot_data, aes(x = Date.Time + as.numeric(Begin.Time..s.), y = Confidence)) +
+        geom_point(aes(color = factor(Common.Name))) +
+        labs(title = "File Details", x = "Time", y = "Confidence") +
+        # scale_x_time() +
+        theme_minimal()
+      
+      plotly_object <- ggplotly(p_file)
+    }
+  })
+    
+
+
+  output$audio_file_drilldown_df <- renderUI({
+    if (isFALSE(is.null(file_click()) || file_click() == "NA" || identical(file_click(), character(0)))) {
+      DT::renderDT(
+        datatable(file_details_data(),
+                  escape = FALSE,
+                  extensions = "FixedHeader",
+                  selection = "none",
+                  filter = "top",
+                  rownames = FALSE,
+                  fillContainer = TRUE,
+                  options = list(
+                    fixedHeader = list(header = TRUE),
+                    columnDefs = list(list(visible = FALSE, 
+                                           targets = c("Begin.Time..s.", "End.Time..s.", "Species.Code", "Begin.Path", "Location", "Date", 
+                                                       "Date.Time", "Month", "Week", "avg_windspeed", 
+                                                       "avg_temperature"))),
+                    scrollY = 500, 
+                    scrollX = TRUE
+                  ))
+      )}
+  })
+  
   
   ##################################################
   ## Application Build: Species-Specific Overview ##
   ##################################################
+  
+  # If a user manually searches for a species, update the species_click() reactive val
+  observeEvent(input$species_lookup_species_overview, {
+    species_name <- unique(all_data$Species.Code[all_data$Common.Name == input$species_lookup_species_overview])
+    species_click(species_name)
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?species=", species_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+    
+  }, ignoreInit = TRUE)
+  
   output$species_title_overview <- renderUI({
-    name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
-    print(h3(name_title))
+    if (isTRUE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+      tagList(
+        p(icon("circle-info"), strong(species_overview_text)),
+        div(
+          tags$img(src = species_overview_pic,
+                   alt = "Northern Saw-whet Owl",
+                   # width = "800px",
+                   # height = "800px"),
+                   style = "max-width: 100%; max-height: 100%;"),
+          p("Photo by Marcie O'Connor at ",
+            tags$a("Prairie Haven", href = "https://www.prairiehaven.com", target = "_blank"),
+            style = "font-size: 12px; color: #666; margin-top: 5px;")
+        )
+      )
+    } else {
+      name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
+      p(h3(name_title))
+    }
+  })
+  
+  output$conditional_species_plots <- renderUI({
+    if (isFALSE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+      fluidRow(
+        lapply(1:6, function(i){
+          column(width = 6,
+                 conditionalPanel(
+                   condition = "input.main_nav == 'species_overview'",
+                   plotlyOutput(outputId = paste0("overviewPlot_", i), height = "400px")
+                 )
+          )
+        })
+      )
+    }
   })
   
   # Function for determining date range
@@ -1088,21 +1843,6 @@ server <- function(input, output, session) {
             Week.Year.Loc = paste(Week, Year, Location, sep= ",")
           )
         
-        # Fill in the gaps when we don't have weeks with data
-        # complete_data <- species_data %>%
-        #   complete(Year = unique(species_data$Year), Week = 1:52, fill = list(Count = 0))
-        # complete_data <- complete_data %>%
-        #   group_by(Year) %>%
-        #   mutate(YearlyCount = n()) %>%
-        #   ungroup()
-        # 
-        # count_data_week <- complete_data %>%
-        #   group_by(Week.Year.Loc) %>%
-        #   summarise(Count = n(), .groups = 'drop')
-        # 
-        # complete_data_week <- left_join(complete_data, count_data_week, by = "Week.Year.Loc")
-        # 
-        
         # Create the plot
         p <- ggplot(species_data, aes(x = Week
                                       # key = Week.Year.Loc,
@@ -1131,20 +1871,86 @@ server <- function(input, output, session) {
   ## Application Build: Species-Specific Location Drilldown ##
   ############################################################
   
+  # If a user manually searches for a species, update the species_click() reactive val
+  observeEvent(input$species_lookup_location, {
+    species_name <- unique(all_data$Species.Code[all_data$Common.Name == input$species_lookup_location])
+    species_click(species_name)
+    
+    # Construct the new URL hash with species query
+    newHash <- paste0("#", input$main_nav, "?species=", species_click())
+    
+    # Update the URL without reloading the app
+    updateQueryString(newHash, mode = "push", session = session)
+
+  }, ignoreInit = TRUE)
+  
   output$species_title <- renderUI({
-    name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
-    h3(name_title)
+      if (isTRUE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+        tagList(
+          p(icon("circle-info"), strong(species_loc_text)),
+          div(
+            tags$img(src = species_loc_pic,
+                     alt = "Ruffed Grouse",
+                     style = "max-width: 100%; height: auto;"),
+            p("Photo by Marcie O'Connor at ",
+              tags$a("Prairie Haven", href = "https://prairiehaven.com", target = "_blank"),
+              style = "font-size: 12px; color: #666; margin-top: 5px;")
+          )
+        )
+      } else {
+        name_title <- unique(subset(filtered_data(), Species.Code==species_click())$Common.Name)
+        div(
+          p(h3(name_title)),
+          p(),
+          p(icon("circle-info"), strong("Select a bar from the plot to view data table."))
+        )
+      }
   })
   
-  output$species_link <- renderUI({
-    req(species_click())  # Ensure species_click() is not NULL
-    tags$a(
-      href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
-                    species_click(), "&mediaType=audio&sort=rating_rank_desc"),
-      target = "_blank",
-      h5("[Open Bird Guide]")
+  output$allaboutbirds <- renderUI({
+    req(species_click())
+    shiny::a(
+      h4("All About Birds",
+      class = "btn btn-default action-button shiny-bound-input lightblue",
+      style = "width:200px"),
+    target = "_blank",
+    href = paste0("https://allaboutbirds.org/guide/",
+                  species_click(),"/overview")
     )
   })
+  
+  output$macaulay <- renderUI({
+    req(species_click())
+    shiny::a(
+      h4("Macaulay Library",
+         class = "btn btn-default action-button shiny-bound-input lightblue",
+         style = "width:200px"),
+      target = "_blank",
+      href = paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
+                    species_click(), "&mediaType=audio&sort=rating_rank_desc")
+    )
+  })
+  
+  output$conditional_tabset <- renderUI({
+    if (isFALSE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+      tabsetPanel(
+        id = "tab_selection",
+        !!!lapply(seq_along(c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")), function(i) {
+          location <- c("House", "Glen", "Prairie", "Wetland", "Savanna", "Forest")[i]
+          tabPanel(
+            title = location,
+            conditionalPanel(
+              condition = paste0("input.main_nav == 'species_loc_drilldown' && input.tab_selection == '", location, "'"),
+              plotlyOutput(outputId = paste0("frequencyPlot_", i)) %>% withSpinner()
+            ),
+            br()
+          )
+        })
+      )
+    }
+  })
+  
+
   
   for (i in seq_along(location_list)) {
     local({
@@ -1324,6 +2130,47 @@ server <- function(input, output, session) {
       as.character(FUN(paste0(id), ...))
   }
   
+  find_audio_file <- function(row) {
+    if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "" || identical(row$Begin.Path, character(0))) {
+      return(NULL)
+    }
+    
+    file_name <- basename(row[["Begin.Path"]])
+    year_val <- year(row[["Date"]])
+    file_loc <- paste0(audio_filepath, "Bio ", as.character(year_val), "/From Recorders")
+    audio_loc <- file.path(file_loc, file_name)
+    
+    if (!file.exists(audio_loc)) {
+      return(NULL)
+    }
+    
+    begin_time <- as.numeric(row[["Begin.Time..s."]])
+    species_name <- row[["Common.Name"]]
+    species_code <- row[["Species.Code"]]
+    conf <- row[["Confidence"]]
+    loc <- row[["Location"]]
+    temp <- paste(round(row[["avg_temperature"]], 3), "°F")
+    wind <- paste(round(row[["avg_windspeed"]], 3), "MPH")
+    
+    # Encode for URL
+    species_name <- URLencode(species_name)
+    file_name <- URLencode(file_name)
+    loc <- URLencode(loc)
+    
+    url <- paste0(
+      tiny_shiny,
+      "species_name=", species_name,
+      "&species_code=", species_code,
+      "&conf=", conf,
+      "&loc=", loc,
+      "&temp=", temp,
+      "&wind=", wind,
+      "&file_name=", file_name,
+      "&begin_time=", begin_time
+    )
+    
+    return(url)
+  }
 
   # Observe the selected data and filter the original dataframe
   observe({
@@ -1331,48 +2178,6 @@ server <- function(input, output, session) {
     
     # Combine file listings for all species
     selected_data(event_data("plotly_selected"))
-    
-    find_audio_file <- function(row) {
-      if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
-        return(NULL)
-      }
-      
-      file_name <- basename(row[["Begin.Path"]])
-      year_val <- year(row[["Date"]])
-      file_loc <- paste0(audio_filepath, "Bio ", as.character(year_val), "/From Recorders")
-      audio_loc <- file.path(file_loc, file_name)
-      
-      if (!file.exists(audio_loc)) {
-        return(NULL)
-      }
-      
-      begin_time <- as.numeric(row[["Begin.Time..s."]])
-      species_name <- row[["Common.Name"]]
-      species_code <- row[["Species.Code"]]
-      conf <- row[["Confidence"]]
-      loc <- row[["Location"]]
-      temp <- paste(round(row[["avg_temperature"]], 3), "°F")
-      wind <- paste(round(row[["avg_windspeed"]], 3), "MPH")
-      
-      # Encode for URL
-      species_name <- URLencode(species_name)
-      file_name <- URLencode(file_name)
-      loc <- URLencode(loc)
-      
-      url <- paste0(
-        tiny_shiny,
-        "species_name=", species_name,
-        "&species_code=", species_code,
-        "&conf=", conf,
-        "&loc=", loc,
-        "&temp=", temp,
-        "&wind=", wind,
-        "&file_name=", file_name,
-        "&begin_time=", begin_time
-      )
-      
-      return(url)
-    }
     
     # filter data based on the selected bin center
     output$filtered_data <- DT::renderDT({
@@ -1460,9 +2265,19 @@ server <- function(input, output, session) {
     output$filtered_data_ui <- renderUI({
       req(selected_data())  # only show the table + spinner if there is selected data
       
-      withSpinner(
-        DT::dataTableOutput("filtered_data")
-      )
+      if (isFALSE(is.null(species_click()) || species_click() == "NA" || identical(species_click(), character(0)))) {
+        div(
+          p(),
+          p(icon("circle-info"), strong("Select sound button to view observation.")),
+          DT::dataTableOutput("filtered_data") %>% withSpinner()
+        ) 
+      }
+
+      # div(
+      #   p(),
+      #   p(icon("circle-info"), strong("Select sound button to view observation.")),
+      #   DT::dataTableOutput("filtered_data") %>% withSpinner()
+      # )
     })
     
   })

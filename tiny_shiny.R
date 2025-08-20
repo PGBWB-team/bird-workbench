@@ -19,7 +19,7 @@ library(RSQLite)
 audio_filepath <- "/Users/laure/Dropbox/Lauren Wick/"
 
 # parent_shiny_url format: "http://pgbwb.com/"
-parent_shiny_url <- "enterpath"
+parent_shiny_url <- "http://127.0.0.1:6766/"
 
 # File path to SQL weather database
 weather_path <- "C:/Users/laure/Dropbox/Lauren Wick/Weather Data/valley.weather.db"
@@ -82,10 +82,9 @@ ui <- page_sidebar(
       downloadButton("audioDownload", "Download Audio"),
       downloadButton("videoDownload", "Download Video"),
       uiOutput("parent_url"),
+      uiOutput("file_page_url"),
       uiOutput("cornell_link")
-    ),
-    
-    plotOutput("wind_plot") %>% withSpinner()
+    )
   )
  #   plotOutput("spectrogram") %>% withSpinner(),
  #   uiOutput("audio_player") %>% withSpinner(),
@@ -167,55 +166,6 @@ server <- function(input, output, session) {
     if (!is.null(values$file_name)) {
       generate_audio_and_spectrogram()
     }
-  })
-  
-  output$wind_plot <- renderPlot({
-    req(values$file_name)
-    file_name <- values$file_name
-    
-    date_time_start <- get_date_time(file_name)
-    date_time_end <- date_time_start + 3600
-    
-    plot_time_start <- date_time_start - 43200 # 12 hours before audio file
-    plot_time_end <- date_time_start + 43200 # 12 hours after audio file
-    
-    # Connect to SQLite database
-    con <- dbConnect(RSQLite::SQLite(), weather_path)
-    
-    query <- "
-    SELECT
-      value AS windspeed,
-      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
-    FROM windSpeed
-    WHERE
-      time >= ? AND
-      time < ?
-  "
-    
-    wind <- dbGetQuery(con, query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
-    dbDisconnect(con)
-    
-    # Convert time back to POSIXct for ggplot
-    wind$time <- as.POSIXct(wind$time, tz = "UTC")
-    
-    # define region of audio file for plotting
-    regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
-    
-    ggplot(wind, aes(time, windspeed)) + 
-      geom_line(linewidth = 1) +
-      geom_rect(data = regions,
-                inherit.aes = FALSE,
-                mapping = aes(xmin = x1, xmax = x2,
-                              ymin = y1, ymax = y2,
-                              fill = "Audio File"),  # Just use a simple category name
-                color = "transparent",
-                alpha = 0.2) +
-      scale_fill_manual(name = paste("Audio File:", format(date_time_start, "%Y-%m-%d %H:%M")),
-                        values = c("Audio File" = "#007bc2")) +
-      labs(title = "Wind Speed", x = "Date Time", y = "Wind Speed (mph)") +
-      theme_minimal() +
-      theme(legend.position = "bottom")
-  
   })
   
 
@@ -341,15 +291,24 @@ server <- function(input, output, session) {
     output$parent_url <- renderUI(
       HTML(paste0('<a class="btn btn-primary" target="_blank" href="',
              url_full,
-             '">Go to Species Drilldown</a>')
+             '">Species Drilldown</a>')
     ))
+    
+    routing_text_file <- "#audio_file_drilldown?file="
+    url_file_full <- paste0(parent_shiny_url, routing_text_file, values$file_name)
+    
+    output$file_page_url <- renderUI(
+      HTML(paste0('<a class="btn btn-primary" target="_blank" href="',
+                  url_file_full,
+                  '">File Drilldown</a>'))
+    )
     
     cornell_page <- paste0("https://search.macaulaylibrary.org/catalog?taxonCode=", 
                            values$species_code, "&mediaType=audio&sort=rating_rank_desc")
     output$cornell_link <- renderUI(
       HTML(paste0('<a class="btn btn-primary" target="_blank" href="',
                   cornell_page,
-                  '">Go to Macaulay Library</a>'))
+                  '">Macaulay Library</a>'))
     )
   })
   
