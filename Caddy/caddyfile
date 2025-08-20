@@ -1,0 +1,31 @@
+pgbwb.com {
+	reverse_proxy 192.168.1.222:8888
+}
+
+www.pgbwb.com {
+	reverse_proxy 192.168.1.222:8888
+}
+
+prod.pgbwb.com {
+	reverse_proxy 192.168.1.222:8888
+}
+
+birds.pgbwb.com {
+	reverse_proxy 192.168.1.222:8888
+}
+
+www.birds.pgbwb.com {
+	reverse_proxy 192.168.1.222:8888
+}
+
+test.pgbwb.com {
+	reverse_proxy 192.168.1.222:8899
+}
+
+tiny.pgbwb.com {
+	reverse_proxy 192.168.1.222:8077
+}
+
+call.pgbwb.com {
+	reverse_proxy 192.168.1.222:8077
+}

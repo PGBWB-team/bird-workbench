@@ -1,0 +1,45 @@
+/Documents
+    BirdWorkbench
+        birdnet_analyzer_RUN_FILES
+            run_files_2020
+            run_files_2021
+            run_files_2022
+            run_files_2023
+            run_files_2024
+            run_files_2025
+        birdnet_analyzer_run_files_COMBINED
+            run_files_COMBINED_2020.txt
+            run_files_COMBINED_2021.txt
+            run_files_COMBINED_2022.txt
+            run_files_COMBINED_2023.txt
+            run_files_COMBINED_2024.txt
+            run_files_COMBINED_2025.txt
+        birdnet_analyzer_run_files_combined_FST
+            run_files_combined_FST.2020.fst
+            run_files_combined_FST.2021.fst
+            run_files_combined_FST.2022.fst
+            run_files_combined_FST.2023.fst
+            run_files_combined_FST.2024.fst
+            run_files_combined_FST.2025.fst
+        BirdWorkbench_BASH_scripts
+            BirdNET_run_file_combiner_prod.sh
+            maintenance_archive_to_FST_update_test.sh
+            maintenance_archive_to_FST_update_prod.sh
+            maintenance_PGBWB_nightly.sh
+        BirdWorkbench_R_Scripts
+            www
+            bird-workbench_UI.m20_prod.R
+            bird-workbench_UI.m20_test.R
+            combine_birdnet_runs_2025_prod.R
+            tiny_shiny.R
+        weather_snoop_valley_weather
+            valley.weather.db
+    
+/Library    
+    LaunchAgents
+        com.pgbwb.bird-workbench_UI.prod.plist
+        com.pgbwb.bird-workbench_UI.test.plist
+        com.pgbwb.tiny_shiny.plist  
+        
+/opt/homebrew/etc/
+    Caddyfile
