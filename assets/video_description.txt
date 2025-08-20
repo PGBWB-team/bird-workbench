@@ -1,1 +1,0 @@
-The videos in the assets folder are demos of using the BirdOMatic application.
