@@ -25,12 +25,29 @@ library(RSQLite)
 # Set file path variables (Requires User Input) #
 #################################################
 
+# Set path the Combined_FST file containing bird-IDs and associated data
+
+input_file_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_Sep19.fst"
+
 # Reading in all data:
-# Second line defines specific columns we want to read, remove unwanted columns to improve loading time
-all_data <- fst::read_fst("/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_Aug_4.fst",
-                          columns = c("Begin.Time..s.", "End.Time..s.", "Common.Name", "Species.Code", "Confidence", 
-                                      "Begin.Path", "Location", "Date", "Date.Time", "Month", "Week",
-                                      "avg_windspeed", "avg_temperature", "Obs.Time"))
+
+all_data <- fst::read_fst(input_file_path,
+                columns = c(
+                	"Begin.Time..s.", 
+                	"End.Time..s.", 
+                	"Common.Name", 
+                	"Species.Code", 
+                	"Confidence", 
+                    "Begin.Path", 
+                    "Location", 
+                    "Date", 
+                    "Date.Time", 
+                    "Month", 
+                    "Week",
+                    "avg_windspeed", 
+                    "avg_temperature", 
+                    "Obs.Time"
+                    ))
 
 # Set root folder for audio files
 
