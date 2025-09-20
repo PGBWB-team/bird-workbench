@@ -9,8 +9,6 @@
 # Combines it with other such files to create an all-years FST that's used as input by 
 #    the UI script.
 
-
-
 library(lubridate)
 library(fst)
 library(data.table)
@@ -19,41 +17,185 @@ library(RSQLite)
 library(dplyr)
 library(fuzzyjoin)
 
-#################################################
-# Set file path variables (REQUIRES USER INPUT) #
-#################################################
+#########################################################################################
+# File path variables - provided via command line - usually in the pipeline BASH script #
+#########################################################################################
 
-# This text file contains the BirdNET-Analyzer results for a year
-## *** Point to the current-year version of that file *** #
+# Collect the arguments after --args in the BASH script
+args <- commandArgs(trailingOnly = TRUE)
 
-input_COMBINED_file <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
+# Parse the arguments into a named list
+parsed_args <- sapply(args, function(arg) {
+  # Make sure each argument is treated as a string (character)
+  if (is.character(arg)) {
+    # Split on '=' to separate name and value
+    key_value <- strsplit(arg, "=")[[1]]
+    
+    # Trim leading/trailing whitespaces (or tabs) from key and value
+    key_value <- trimws(key_value)
+    
+    # Return the key-value pair as a list
+    return(key_value)
+  }
+}, simplify = FALSE)
 
-# Set file path for writing a single-year .fst file -- include a matching year in file name as we are creating one .FST per year 
-fst_output <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2025.m18_v2.fst"
+# Convert the list into a named vector for easy access
+parsed_args <- setNames(sapply(parsed_args, `[`, 2), sapply(parsed_args, `[`, 1))
 
-# Specify paths to single-year FST files which will be combined into an all-years combined FST to be used as input by the UI script
+# # Print the parsed arguments
+# print(parsed_args)
+# 
+# # Access each argument by its name
+# 
+# cat("input_COMBINED_file", parsed_args["input_COMBINED_file"], "\n")
+# cat("fst_output", parsed_args["fst_output"], "\n")
+# cat("yearly_FST_input_paths2020", parsed_args["yearly_FST_input_paths2020"], "\n")
+# cat("yearly_FST_input_paths2021", parsed_args["yearly_FST_input_paths2021"], "\n")
+# cat("yearly_FST_input_paths2022", parsed_args["yearly_FST_input_paths2022"], "\n")
+# cat("yearly_FST_input_paths2023", parsed_args["yearly_FST_input_paths2023"], "\n")
+# cat("yearly_FST_input_paths2024", parsed_args["yearly_FST_input_paths2024"], "\n")
+# cat("yearly_FST_input_paths2025", parsed_args["yearly_FST_input_paths2025"], "\n")
+# cat("combined_FST_path", parsed_args["combined_FST_path"], "\n")
+# cat("weather_path", parsed_args["weather_path"], "\n")
+# cat("start_date", parsed_args["start_date"], "\n")
+# cat("end_date", parsed_args["end_date"], "\n")
 
+
+# Now you can access each argument by its name:
+# print(parsed_args["input_COMBINED_file"])  # Should print the path "/path/1.fst"
+# print(parsed_args["fst_output"])  # Should print the path "/path/1.fst"
+# print(parsed_args["yearly_FST_input_paths2020"])  # Should print the path "/path/1.fst"
+# print(parsed_args["yearly_FST_input_paths2021"])  # Should print the path "/path/1.fst"
+# print(parsed_args["yearly_FST_input_paths2022"])  # Should print the path "/path/1.fst"
+# print(parsed_args["yearly_FST_input_paths2023"])  # Should print the path "/path/1.fst"
+# print(parsed_args["yearly_FST_input_paths2024"])  # Should print the path "/path/1.fst"
+# print(parsed_args["yearly_FST_input_paths2025"])  # Should print the path "/path/1.fst"
+# print(parsed_args["combined_FST_path"])  # Should print the path "/path/1.fst"
+# print(parsed_args["weather_path"])  # Should print the path "/path/1.fst"
+# print(parsed_args["start_date"])  # Should print the path "/path/1.fst"
+# print(parsed_args["end_date"])  # Should print the path "/path/1.fst"
+
+# Load each parameter into an R variable
+# input_COMBINED_file <- parsed_args["input_COMBINED_file"]
+# fst_output <- parsed_args["fst_output"]
+# yearly_FST_input_paths2020 <- parsed_args["yearly_FST_input_paths2020"]
+# yearly_FST_input_paths2021 <- parsed_args["yearly_FST_input_paths2021"]
+# yearly_FST_input_paths2022 <- parsed_args["yearly_FST_input_paths2022"]
+# yearly_FST_input_paths2023 <- parsed_args["yearly_FST_input_paths2023"]
+# yearly_FST_input_paths2024 <- parsed_args["yearly_FST_input_paths2024"]
+# yearly_FST_input_paths2025 <- parsed_args["yearly_FST_input_paths2025"]
+# combined_FST_path <- parsed_args["combined_FST_path"]
+# weather_path <- parsed_args["weather_path"]
+# start_date <- parsed_args["start_date"]
+# end_date <- parsed_args["end_date"]
+# # 
+# # Print out the variables to confirm they've been loaded correctly
+# 
+# cat("input_COMBINED_file:", input_COMBINED_file, "\n")
+# cat("input_COMBINED_file:", input_COMBINED_file, "\n")
+# cat("yearly_FST_input_paths2020:", yearly_FST_input_paths2020, "\n")
+# cat("yearly_FST_input_paths2021:", yearly_FST_input_paths2021, "\n")
+# cat("yearly_FST_input_paths2021:", yearly_FST_input_paths2021, "\n")
+# cat("yearly_FST_input_paths2021:", yearly_FST_input_paths2021, "\n")
+# cat("yearly_FST_input_paths2024:", yearly_FST_input_paths2024, "\n")
+# cat("yearly_FST_input_paths2025:", yearly_FST_input_paths2025, "\n")
+# cat("combined_FST_path:", combined_FST_path, "\n")
+# cat("weather_path:", weather_path, "\n")
+# cat("start_date:", start_date, "\n")
+# cat("end_date:", end_date, "\n")
+# 
+# # start_date <- '2025-01-01'
+# # end_date <- '2025-12-31'
+# # 
+# # cat("direct-loaded-start_date:", start_date, "\n")
+# # cat("direct-loaded-end_date:", end_date, "\n")
+# 
+# # load yearly input paths into the array
+# 
+# yearly_FST_input_paths <- c(
+#   yearly_FST_input_paths2020,
+#   yearly_FST_input_paths2021,
+#   yearly_FST_input_paths2022,
+#   yearly_FST_input_paths2023,
+#   yearly_FST_input_paths2024,
+#   yearly_FST_input_paths2025
+# )
+# 
+
+
+# Gracefully exit if no arguments are passed 
+if (length(args) == 0) {
+  cat("No arguments passed. Exiting gracefully.\n")
+  quit(save = "no", status = 1)  # Exit with status 1 (error condition)
+}
+
+# Halt - (for testing)
+# cat("Script finished successfully.\n")
+# quit(save = "no", status = 0)  # Exit with status 0 (successful exit)
+
+# If we have arguments, process them 
+cat("Arguments received, proceeding with the script...\n")
+
+########################################
+# Load variables from parsed arguments #
+########################################
+
+# This text file contains the BirdNET-Analyzer results for a single year.  It will be
+# converted to a single-year FST file, ready to be merged with other yearly FST files. 
+# Normal case: current-year results file.  But prior years can also be regenerated this
+# way
+input_COMBINED_file <- parsed_args["input_COMBINED_file"]
+
+# Set file path for writing a single-year .fst file -- include a matching year in file 
+# name as we are creating one .FST per year 
+fst_output <- parsed_args["fst_output"]
+
+# Specify paths to single-year FST files which will be combined into an all-years 
+# combined FST.  This is a two-step process.
+
+# First load the parsed arguments into R variables
+
+yearly_FST_input_paths2020 <- parsed_args["yearly_FST_input_paths2020"]
+yearly_FST_input_paths2021 <- parsed_args["yearly_FST_input_paths2021"]
+yearly_FST_input_paths2022 <- parsed_args["yearly_FST_input_paths2022"]
+yearly_FST_input_paths2023 <- parsed_args["yearly_FST_input_paths2023"]
+yearly_FST_input_paths2024 <- parsed_args["yearly_FST_input_paths2024"]
+yearly_FST_input_paths2025 <- parsed_args["yearly_FST_input_paths2025"]
+
+# Then concatenate those file-path variables into a vector that will be used to 
+# combine those files into a single FST
+  
 yearly_FST_input_paths <- c(
-  "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2020.m18_v2.fst",
-  "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2021.m18_v2.fst",
-  "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2022.m18_v2.fst",
-  "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2023.m18_v2.fst",
-  "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2024.m18_v2.fst",
-  "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_FST.2025.m18_v2.fst"
+  yearly_FST_input_paths2020,
+  yearly_FST_input_paths2021,
+  yearly_FST_input_paths2022,
+  yearly_FST_input_paths2023,
+  yearly_FST_input_paths2024,
+  yearly_FST_input_paths2025
 )
 
-# Set file path for all-years combined .fst file - this file (or a renamed version of it) gets handed to the UI script as input 
-combined_FST_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_combined_FST/run_files_combined_Aug_4.fst"
+print(yearly_FST_input_paths)
+
+
+# Set file path for all-years combined .fst output file - this file (or a renamed 
+# version of it) gets handed to the UI script as input 
+combined_FST_path <- parsed_args["combined_FST_path"]
+
+print(combined_FST_path)
 
 # File path to SQL weather database
-weather_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/weather_snoop_valley_weather/valley.weather.db"
+weather_path <- parsed_args["weather_path"]
 
+print(weather_path)
 ## Set start end end dates for the SQL select that match the year of the input and output files.  
 ## Note that these are positional and will be evaluated sequentially by the RSQLite library.  
 ## The question marks in the SQL query indicate where the substitutions occur.
 
-start_date <- '2025-01-01'
-end_date <- '2025-12-31'
+start_date <- parsed_args["start_date"]
+end_date <- parsed_args["end_date"]
+
+print(start_date)
+print(end_date)
 
 ################
 # Start script #
@@ -165,8 +307,9 @@ all_data <- do.call('rbind', data_70_subset)
 # Connect to SQLite database
 con <- dbConnect(RSQLite::SQLite(), weather_path)
 
-# Query for hourly temp and wind
+# SQL Query for hourly temp and wind
 ## Uses parameter binding for safe date substitution
+
 query <- "
 -- Get hourly wind speed
 WITH wind_hourly AS (
