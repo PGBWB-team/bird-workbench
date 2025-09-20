@@ -1,9 +1,35 @@
 #!/bin/bash
 
-# EDIT - Directory containing the files to process
-input_dir="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025" 
-# EDIT - Output file
-output_file="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
+################################################################
+# Initialize paths and variables - provided via command line   #
+################################################################
+
+# Check for required arguments
+if [ "$#" -ne 2 ]; then
+  echo
+  echo "Missing arguments.  Expected paths for input_dir and output_file"
+  exit 1
+  echo
+fi
+
+# Directory containing the files to process
+# input_dir="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_RUN_FILES/run_files_2025" 
+
+input_dir="$1" 
+
+# Output file
+# output_file="/Users/mikeoconnor/Documents/BirdWorkbench/birdnet_analyzer_run_files_COMBINED/run_files_COMBINED_2025.txt"
+
+output_file="$2"
+
+echo "success:"
+echo "Input Directory: $input_dir"
+echo "Output File: $output_file"
+
+# Halt test run
+
+# exit 1
+
 
 # Ensure the output file is empty initially
 > "$output_file"
