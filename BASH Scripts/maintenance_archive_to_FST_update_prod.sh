@@ -93,7 +93,7 @@ set -e
 	###########################################################  
 
 #		Path to the script	
-		REGENERATE_FST_FILES_SCRIPT_PATH="$HOME/Documents/BirdWorkbench/BirdWorkbench_R_Scripts/regenerate_FST_files_2025_prod.R"
+		REGENERATE_FST_FILES_SCRIPT_PATH="$HOME/Documents/BirdWorkbench/BirdWorkbench_R_Scripts/regenerate_FST_files_prod.R"
 
 #		PASS 1: 
 #		Regenerate a YEARLY FST file using the yearly combined_run text file from the 
