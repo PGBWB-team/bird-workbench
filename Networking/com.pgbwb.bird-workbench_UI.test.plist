@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.pgbwb.bird-workbench_UI.test</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Frameworks/R.framework/Versions/4.5-arm64/Resources/bin/Rscript</string>
+        <string>-e</string>
+        <string>shiny::runApp('/Users/mikeoconnor/Documents/BirdWorkbench/BirdWorkbench_R_Scripts/bird-workbench_UI.m20_test.R', port=8899, host='0.0.0.0')</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/rscript_output.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/rscript_error.log</string>
+</dict>
+</plist> 
