@@ -65,11 +65,15 @@ footer_text <- p("This project is powered by ",
                  ", ",
                  tags$a("the R Project", href = "https://www.r-project.org/", target = "_blank"), 
                  ", ",
-                 tags$a("PGBWB-team", href = "https://github.com/PGBWB-team/bird-workbench", target = "_blank"),
-                 ", ",
                  tags$a("Shiny", href = "https://shiny.posit.co/", target = "_blank"), 
+                 ", ",
+                 tags$a("Ears In The Driftless", href = "https://earsinthedriftless.com/", target = "_blank"),
                  ", and ",
-                 tags$a("Prairie Haven", href = "https://www.earsinthedriftless.com/", target = "_blank")
+                 tags$a("Prairie Haven", href = "https://www.earsinthedriftless.com/", target = "_blank"),
+                 ".  Documentation site is HERE ",
+                 tags$a("docs.birdomatic.com", href = "https://docs.birdomatic.com/", target = "_blank"),
+                 ".  GitHub site is HERE ",
+                 tags$a("PGBWB-team", href = "https://github.com/PGBWB-team/bird-workbench", target = "_blank")                 
                  )
 
 # Photo links and text:
