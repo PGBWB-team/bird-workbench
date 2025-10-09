@@ -1,7 +1,8 @@
 # Pretty Good Bird Workbench (aka BirdOMatic)
 &nbsp;
-Hi! Welcome to the repository for the 'Pretty Good Bird Workbench'. I worked on this project with Mike from Prairie Haven 
-to review results from Cornell Lab of Ornithology's BirdNET Analyzer. Pretty Good Bird Workbench is a Shiny-backed web 
+
+
+Pretty Good Bird Workbench is a Shiny-backed web 
 application that organizes years of bioacoustic data into various forms. This application can be used to look at BirdNET 
 observations for specific species over time and across different habitats. This tool also allows you to drilldown into
 specific species and manually review the recorded observations to confirm or deny species presence. Pretty Good Bird Workbench
