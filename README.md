@@ -1,9 +1,9 @@
 # Pretty Good Bird Workbench (aka BirdOMatic)
 
 <div align="center">
-  <h1>BirdNET-Analyzer</h1>
-    <a href="https://birdnet-team.github.io/BirdNET-Analyzer/">
-        <img src="https://github.com/birdnet-team/BirdNET-Analyzer/blob/main/docs/_static/logo_birdnet_big.png?raw=true" width="300" alt="BirdNET-Logo" />
+  <h1>Pretty Good Bird Workbench (aka BirdOMatic)</h1>
+    <a href="https://docs.birdomatic.com">
+        <img src="https://docs.birdomatic.com/wp-content/uploads/2025/08/Slide4.jpeg?raw=true" width="300" alt="BirdOMatic Overview" />
     </a>
 </div>
 <br>
