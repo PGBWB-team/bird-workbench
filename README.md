@@ -1,5 +1,14 @@
 # Pretty Good Bird Workbench (aka BirdOMatic)
 
+<div align="center">
+  <h1>BirdNET-Analyzer</h1>
+    <a href="https://birdnet-team.github.io/BirdNET-Analyzer/">
+        <img src="https://github.com/birdnet-team/BirdNET-Analyzer/blob/main/docs/_static/logo_birdnet_big.png?raw=true" width="300" alt="BirdNET-Logo" />
+    </a>
+</div>
+<br>
+<div align="center">
+
 Pretty Good Bird Workbench is a Shiny-backed web 
 application that organizes years of bioacoustic data into various forms. This application can be used to look at BirdNET 
 observations for specific species over time and across different habitats. This tool also allows you to drilldown into
