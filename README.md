@@ -18,11 +18,15 @@ and dataframes for further exploration, and the app can generate short audio cli
 
 This GitHub repository also contains various BASH and R scripts that automate bioacoustic data management and provide network
 services to host the BirdOMatic website.  These are intended to serve as examples for folks who might be interested in doing
-something similar.
+something similar.  
 
-<strong>Powered by: </strong>  <a href="https://github.com/birdnet-team/BirdNET-Analyzer" target="_blank" rel="noopener">BirdNET Analyzer</a>, <a href="https://www.r-project.org/" target="_blank" rel="noopener">the R Project</a>, <a href="https://shiny.posit.co/" target="_blank" rel="noopener">Shiny</a>, <a href="https://earsinthedriftless.com/" target="_blank" rel="noopener">Ears In The Driftless</a>, and <a href="https://www.earsinthedriftless.com/" target="_blank" rel="noopener">Prairie Haven</a>.
+To learn about the exploring the app, configuring the back end, installation and configuration tips, network configuration and more, visit the <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a>.
 
-<strong>Learn more: </strong> Visit our <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a>.
+<br>
+<br>
 
 <strong>Explore the app (and the data): </strong> Visit <a href="https://www.birdomatic.com" target="_blank" rel="noopener">BirdOMatic</a>.
 
+<a href="https://www.birdomatic.com"><img  src="https://docs.birdomatic.com/wp-content/uploads/2025/10/BirdOMatic_front_screen-scaled.png" alt="BirdOMatic Front Page" /> </a>
+
+<strong>The project is powered by: </strong>  <a href="https://github.com/birdnet-team/BirdNET-Analyzer" target="_blank" rel="noopener">BirdNET Analyzer</a>, <a href="https://www.r-project.org/" target="_blank" rel="noopener">the R Project</a>, <a href="https://shiny.posit.co/" target="_blank" rel="noopener">Shiny</a>, <a href="https://earsinthedriftless.com/" target="_blank" rel="noopener">Ears In The Driftless</a>, and <a href="https://www.earsinthedriftless.com/" target="_blank" rel="noopener">Prairie Haven</a>.
