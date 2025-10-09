@@ -1,13 +1,12 @@
-# Pretty Good Bird Workbench (aka BirdOMatic)
 
-<div align="center">
+<div align="left">
   <h1>Pretty Good Bird Workbench (aka BirdOMatic)</h1>
     <a href="https://docs.birdomatic.com">
         <img src="https://docs.birdomatic.com/wp-content/uploads/2025/08/Slide4.jpeg?raw=true" width="300" alt="BirdOMatic Overview" />
     </a>
 </div>
 <br>
-<div align="center">
+<div align="left">
 
 Pretty Good Bird Workbench is a Shiny-backed web 
 application that organizes years of bioacoustic data into various forms. This application can be used to look at BirdNET 
