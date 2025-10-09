@@ -22,4 +22,7 @@ something similar.
 
 <strong>Powered by: </strong>  <a href="https://github.com/birdnet-team/BirdNET-Analyzer" target="_blank" rel="noopener">BirdNET Analyzer</a>, <a href="https://www.r-project.org/" target="_blank" rel="noopener">the R Project</a>, <a href="https://shiny.posit.co/" target="_blank" rel="noopener">Shiny</a>, <a href="https://earsinthedriftless.com/" target="_blank" rel="noopener">Ears In The Driftless</a>, and <a href="https://www.earsinthedriftless.com/" target="_blank" rel="noopener">Prairie Haven</a>.
 
-<strong>Learn more: </strong> Visit our <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a> for all that and more.
+<strong>Learn more: </strong> Visit our <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a>.
+
+<strong>Explore the app (and the data): </strong> Visit our <a href="https://www.birdomatic.com" target="_blank" rel="noopener">BirdOMatic</a>.
+
