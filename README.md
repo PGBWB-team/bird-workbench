@@ -24,5 +24,5 @@ something similar.
 
 <strong>Learn more: </strong> Visit our <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a>.
 
-<strong>Explore the app (and the data): </strong> Visit our <a href="https://www.birdomatic.com" target="_blank" rel="noopener">BirdOMatic</a>.
+<strong>Explore the app (and the data): </strong> Visit <a href="https://www.birdomatic.com" target="_blank" rel="noopener">BirdOMatic</a>.
 
