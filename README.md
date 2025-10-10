@@ -11,7 +11,7 @@ The Pretty Good Bird Workbench centers around an R-based Shiny-backed web
 application that organizes years of bioacoustic data into various forms. This application can be used to look at BirdNET 
 observations for specific species over time and across different habitats. This tool also provides the ability to drill down into
 specific species and manually review individual recorded observations in order to confirm or deny species presence. There are interactive plots 
-and dataframes for further exploration, and the app can generate short audio clips and spectrograms for eachindividual BirdNET observation. 
+and dataframes for further exploration, and the app can generate short audio clips and spectrograms for each individual BirdNET observation. 
 
 <img src="https://docs.birdomatic.com/wp-content/uploads/2025/09/Periodic-Updates-workflow-1.jpg)?raw=true" alt="BirdOMatic Overview" />
 
@@ -20,7 +20,7 @@ This GitHub repository also contains various BASH and R scripts that automate bi
 services to host the BirdOMatic website.  These are intended to serve as examples for folks who might be interested in doing
 something similar.  
 
-To learn about the exploring the app, configuring the back end, installation and configuration tips, network configuration and more, visit the <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a>.
+To learn about the app, configuring the back end, installation and configuration tips, network configuration and more, visit the <a href="https://docs.birdomatic.com" target="_blank" rel="noopener">documentation site</a>.
 
 <br>
 <br>
