@@ -1,5 +1,40 @@
 #!/bin/bash
 
+################################################################################
+# MAIN: RUN SCRIPTS IN SEQUENCE - Function, defined here, called at the bottom #
+################################################################################
+
+main() {
+
+	# Capture and announce start time
+	
+	start_time=$(date +%s)
+	print_blank_lines 2
+	echo "Started at: $(date '+%Y:%m:%d %H:%M:%S')"
+	start_time_formatted=$(date '+%Y:%m:%d %H:%M:%S')
+	
+	# This section runs the functions in sequence.  Toggle comments for run-control
+	 
+	# 	run_BirdNET_script
+	# 	run_file_combiner
+	#	regen_FST_files
+	#   copy_new_FST_to_UI_input_target -- placeholder
+	
+	#	check_prod_plist_exists
+	#	reload_prod_launchagent
+	#	check_test_plist_exists
+	#	reload_test_launchagent
+	#	check_tiny_shiny_plist_exists
+	#	reload_tiny_shiny_launchagent
+	
+	#  NOTE: This last group are for testing - a new instance of the FST file gets pulled in each 
+	#  time the UI is reloaded in the web browser - restarting the UI background task isn't 
+	#  required.  To test various versions of the FST file, change the path in the UI
+	#  script and hit refresh in the browser
+	
+}
+
+
 # archive_to_FST_pipeline.sh - BirdNET Analysis Pipeline
 #
 # Orchestrates the three-step pipeline:
@@ -91,7 +126,7 @@ set -e
 
 # Component base directories (modify to reflect Test or Production)
 
-	RUN_FILES_BASE="$BASE_DIR/Results_files/Test/birdnet_analyzer_RUN_FILES"
+	RUN_FILES_BASE="$BASE_DIR/Results_files/Test/birdnet_analyzer_RUN_FILES" 
 	COMBINED_BASE="$BASE_DIR/Results_files/Test/birdnet_analyzer_run_files_COMBINED"
 	FST_BASE="$BASE_DIR/Results_files/Test/birdnet_analyzer_run_files_combined_FST"
 
@@ -365,7 +400,8 @@ EOF
 		if [ -d "$log_dir" ]; then
 			# List files matching pattern, sorted by modification time (newest first)
 			# Keep first 3, delete the rest
-			ls -t "$log_dir"/$log_pattern 2>/dev/null | tail -n +4 | xargs -r rm -f
+#			ls -t "$log_dir"/$log_pattern 2>/dev/null | tail -n +4 | xargs -r rm -f
+			find "$log_dir" -maxdepth 1 -name "$log_pattern" | sort -r | tail -n +4 | xargs -r rm -f
 		fi
 	}
 
@@ -381,7 +417,7 @@ EOF
 			echo "Archived existing all_years.fst to: $ARCHIVE_DIR/$archive_name"
 			
 			# Keep only 2 most recent archives, delete older ones
-			ls -t "$ARCHIVE_DIR"/all_years_*.fst 2>/dev/null | tail -n +3 | xargs -r rm -f
+			find "$ARCHIVE_DIR" -maxdepth 1 -name "all_years_*.fst" | sort -r | tail -n +3 | xargs -r rm -f
 			echo "Cleaned up old archives (keeping 2 most recent)"
 		else
 			echo "No existing all_years.fst to archive"
@@ -461,7 +497,7 @@ EOF
 				if [[ "$mode" == "single_year_replacement" ]] || [[ "$mode" == "all_years_replacement" ]]; then
 					echo "Clearing existing results for $process_year (replacement mode)..."
 					rm -f "$output_folder"/*.BirdNET.selection.table.txt
-					local cleared_count=$(ls -1 "$output_folder"/*.BirdNET.selection.table.txt 2>/dev/null | wc -l)
+					local cleared_count=$(find "$output_folder" -maxdepth 1 -name "*.BirdNET.selection.table.txt" | wc -l)
 					echo "Cleared existing result files"
 				fi
 				
@@ -481,7 +517,8 @@ EOF
 				
 			# Count output files
 				
-				local result_count=$(ls -1 "$output_folder"/*.BirdNET.selection.table.txt 2>/dev/null | wc -l)
+#				local result_count=$(ls -1 "$output_folder"/*.BirdNET.selection.table.txt 2>/dev/null | wc -l)
+				local result_count=$(find "$output_folder" -maxdepth 1 -name "*.BirdNET.selection.table.txt" | wc -l)
 				echo "Completed year $process_year: $result_count result files in output folder"
 			done
 		
@@ -562,7 +599,7 @@ EOF
 				fi
 				
 				# Count input files
-				local input_count=$(ls -1 "$input_folder"/*.BirdNET.selection.table.txt 2>/dev/null | wc -l)
+				local input_count=$(find "$input_folder" -maxdepth 1 -name "*.BirdNET.selection.table.txt" | wc -l)
 				
 				if [ $input_count -eq 0 ]; then
 					echo "WARNING: No BirdNET result files found in $input_folder"
@@ -864,36 +901,42 @@ EOF
 	}
 		
 
-#################################
-# MAIN: RUN SCRIPTS IN SEQUENCE #
-#################################
+# #########################################################################
+# CALL "MAIN" FUNCTION TO RUN THE FUNCTIONS IN ORDER - PASSING PARAMETERS #
+###########################################################################
 
+main "$@"
 
-	# Capture and announce start time
-	
-	start_time=$(date +%s)
-	print_blank_lines 2
-	echo "Started at: $(date '+%Y:%m:%d %H:%M:%S')"
-	start_time_formatted=$(date '+%Y:%m:%d %H:%M:%S')
-	
-	# This section runs the functions in sequence.  Use comments for run-control
-	 
-		run_BirdNET_script
-		run_file_combiner
-		regen_FST_files
-	#   copy_new_FST_to_UI_input_target -- placeholder
-	
-	#	check_prod_plist_exists
-	#	reload_prod_launchagent
-	#	check_test_plist_exists
-	#	reload_test_launchagent
-	#	check_tiny_shiny_plist_exists
-	#	reload_tiny_shiny_launchagent
-	
-	#  NOTE: This last group are for testing - a new instance of the FST file gets pulled in each 
-	#  time the UI is reloaded in the web browser - restarting the UI background task isn't 
-	#  required.  To test various versions of the FST file, change the path in the UI
-	#  script and hit refresh in the browser
+# #################################
+# # MAIN: RUN SCRIPTS IN SEQUENCE #
+# #################################
+# 
+# 
+# 	# Capture and announce start time
+# 	
+# 	start_time=$(date +%s)
+# 	print_blank_lines 2
+# 	echo "Started at: $(date '+%Y:%m:%d %H:%M:%S')"
+# 	start_time_formatted=$(date '+%Y:%m:%d %H:%M:%S')
+# 	
+# 	# This section runs the functions in sequence.  Use comments for run-control
+# 	 
+# 		run_BirdNET_script
+# 	#	run_file_combiner
+# 	#	regen_FST_files
+# 	#   copy_new_FST_to_UI_input_target -- placeholder
+# 	
+# 	#	check_prod_plist_exists
+# 	#	reload_prod_launchagent
+# 	#	check_test_plist_exists
+# 	#	reload_test_launchagent
+# 	#	check_tiny_shiny_plist_exists
+# 	#	reload_tiny_shiny_launchagent
+# 	
+# 	#  NOTE: This last group are for testing - a new instance of the FST file gets pulled in each 
+# 	#  time the UI is reloaded in the web browser - restarting the UI background task isn't 
+# 	#  required.  To test various versions of the FST file, change the path in the UI
+# 	#  script and hit refresh in the browser
 	
 	
 ###########
