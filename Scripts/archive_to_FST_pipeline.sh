@@ -16,8 +16,8 @@ main() {
 	# This section runs the functions in sequence.  Toggle comments for run-control
 	 
 	# 	run_BirdNET_script
-	# 	run_file_combiner
-	#	regen_FST_files
+	 	run_file_combiner
+		regen_FST_files
 	#   copy_new_FST_to_UI_input_target -- placeholder
 	
 	#	check_prod_plist_exists
@@ -141,10 +141,21 @@ set -e
 
 # BirdNET parameters
 
-	THREADS=8
-	LAT=44.415947
-	LON=-91.700659
+	#	Use this to tune how much of the CPU the script consumes (more = faster processing)
+	
+		THREADS=8
+	
+	#	If species are determined by LAT LON coordinates set these:
+	
+		LAT=44.415947	
+		LON=-91.700659	
+		
+	#	If species are determined with custom species-list file put the path to that file 
+	#	here
+	
+		SPECIES_LIST_FILE_PATH="$BASE_DIR/Species_Lists/Test/Prairie_Haven_species_list_all_test.txt"
 
+	
 # Weather database
 
 	WEATHER_DB_PATH="$BASE_DIR/weather_snoop_valley_weather/valley.weather.db"
@@ -152,8 +163,8 @@ set -e
 # Scripts
 
 	SCRIPTS_DIR="$BASE_DIR/Scripts/Test"
-	COMBINER_SCRIPT_NAME="test_combine_run_files.sh"
-	FST_SCRIPT_NAME="test_regenerate_FST.R"
+	COMBINER_SCRIPT_NAME="combine_run_files.sh"
+	FST_SCRIPT_NAME="regenerate_FST.R"
 
 # LaunchAgent plists
 
@@ -260,8 +271,8 @@ EOF
 
 	if [[ "$mode" == "all_years_replacement" ]]; then
 		echo ""
-		echo "WARNING: all_years_replacement mode will take 1-2 WEEKS to complete"
-		echo "         This will reprocess ALL years from $first_year through $selected_year"
+		echo "WARNING: all_years_replacement mode could take 1-2 WEEKS to complete"
+		echo " This will reprocess ALL years from $first_year through $selected_year"
 		echo ""
 		read -p "Are you sure you want to continue? (yes/no): " confirm
 		confirm=$(echo "$confirm" | tr '[:upper:]' '[:lower:]')
@@ -507,13 +518,25 @@ EOF
 			# Run BirdNET-Analyzer (output goes to log file)
 				
 				echo "Running BirdNET-Analyzer..."
+				
+			# Use LAT LON to generate species list, OR...
+
+# 				python3 -m birdnet_analyzer.analyze \
+# 					--threads "$THREADS" \
+# 					--lat "$LAT" \
+# 					--lon "$LON" \
+# 					$SKIP_EXISTING \
+# 					-o "$output_folder" \
+# 					"$input_folder" 2>&1 | tee -a "$BIRDNET_LOG"
+
+			# Use a species-list file 
+
 				python3 -m birdnet_analyzer.analyze \
 					--threads "$THREADS" \
-					--lat "$LAT" \
-					--lon "$LON" \
+					--slist "$SPECIES_LIST_FILE_PATH" \
 					$SKIP_EXISTING \
 					-o "$output_folder" \
-					"$input_folder" 2>&1 | tee -a "$BIRDNET_LOG"
+					"$input_folder" 2>&1 | tee -a "$BIRDNET_LOG"					
 				
 			# Count output files
 				
@@ -551,7 +574,7 @@ EOF
 # Input:  Multiple .BirdNET.selection.table.txt files in run_files_YYYY/ directories
 # Output: One single_year_YYYY.txt file per year processed
 #
-# Calls: BirdNET_run_file_combiner_test.sh (which expects: input_folder output_file)
+# Calls: BirdNET_run_file_combiner.sh (which expects: input_folder output_file)
 
 	run_file_combiner() {
 		print_blank_lines 2
