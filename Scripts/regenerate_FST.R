@@ -32,7 +32,9 @@
 #   single_year_fst_output - Path for output single_year_YYYY.fst (output from PASS 1)
 #   yearly_fst_paths       - Comma-separated list of yearly FST file paths (input for PASS 2)
 #   all_years_fst_output   - Path for output all_years.fst (output from PASS 2)
-#   weather_path           - Path to SQLite weather database
+#   weather_path           - Path to Open-Meteo SQLite database
+#                            (open_metro_weather.db, populated by fetch_weather_data()
+#                            in archive_to_FST_pipeline.sh before this script runs)
 #   start_date             - Weather data start date (YYYY-MM-DD) for current year
 #   end_date               - Weather data end date (YYYY-MM-DD) for current year
 #   first_year             - First year in dataset (e.g., 2020)
@@ -138,7 +140,8 @@
 	selected_year <- as.integer(parsed_args["selected_year"])
 	cat("Year range:", first_year, "through", selected_year, "\n")
 
-# File path to SQL weather database
+# File path to Open-Meteo SQLite weather database
+# (populated by fetch_weather_data() in archive_to_FST_pipeline.sh)
 
 	weather_path <- parsed_args["weather_path"]
 	cat("Weather path:", weather_path, "\n")
@@ -306,54 +309,105 @@
 # WEATHER DATA #
 ################
 
-# Connect to SQLite database
+# Connect to SQLite database and retrieve hourly weather data for the
+# date range of this year's BirdNET observations.
+#
+# The database is populated upstream by fetch_weather_data() in
+# archive_to_FST_pipeline.sh, which pulls from the Open-Meteo
+# Historical Weather API before this script runs.
+#
+# Output: hourly_avg data frame with columns:
+#   hour             - POSIXct timestamp (UTC)
+#   avg_temperature  - degrees Celsius (2 m above ground)
+#   avg_windspeed    - km/h (10 m above ground)
+#
+# Additional columns available in open_metro_weather_hourly but not yet
+# joined to observations (add to SELECT and downstream use as needed):
+#   precipitation       - mm (preceding hour sum)
+#   wind_direction_10m  - degrees
+#   wind_gusts_10m      - km/h
+#   surface_pressure    - hPa
+#   cloud_cover         - %
+
+# ---------------------------------------------------------------------------
+# LEGACY QUERY (local weather stations via valley.weather.db) - RETIRED
+# Retained for reference. Replaced by Open-Meteo query below.
+#
+#	con <- dbConnect(RSQLite::SQLite(), weather_path)
+#
+#	query <- "
+#	-- Get hourly wind speed
+#	WITH wind_hourly AS (
+#	  SELECT
+#		strftime('%Y-%m-%d %H:00:00', datetime(time, 'unixepoch')) AS hour,
+#		AVG(value) AS avg_windspeed
+#	  FROM windSpeed
+#	  WHERE
+#		time >= strftime('%s', ?) AND
+#		time <= strftime('%s', ?) AND
+#		strftime('%S', datetime(time, 'unixepoch')) != '00'
+#	  GROUP BY hour
+#	),
+#	-- Get hourly temperature
+#	temp_hourly AS (
+#	  SELECT
+#		strftime('%Y-%m-%d %H:00:00', datetime(time, 'unixepoch')) AS hour,
+#		AVG(value) AS avg_temperature
+#	  FROM outdoorTemperature
+#	  WHERE
+#		time >= strftime('%s', ?) AND
+#		time <= strftime('%s', ?) AND
+#		strftime('%S', datetime(time, 'unixepoch')) != '00'
+#	  GROUP BY hour
+#	)
+#	-- Join the two hourly tables
+#	SELECT
+#	  w.hour,
+#	  w.avg_windspeed,
+#	  t.avg_temperature
+#	FROM wind_hourly w
+#	LEFT JOIN temp_hourly t ON w.hour = t.hour
+#	ORDER BY w.hour;
+#	"
+#
+#	hourly_avg <- dbGetQuery(con, query, params = list(
+#	  start_date, end_date,  # for wind_hourly
+#	  start_date, end_date   # for temp_hourly
+#	))
+#
+#	dbDisconnect(con)
+# ---------------------------------------------------------------------------
+
+# Connect to Open-Meteo SQLite database
 
 	con <- dbConnect(RSQLite::SQLite(), weather_path)
 
-# SQL Query for hourly temp and wind
-## Uses parameter binding for safe date substitution
+# Query open_metro_weather_hourly for the year date range.
+# Column aliases intentionally match the legacy query output so the
+# fuzzy-join below requires no changes.
+# Additional variables (precipitation, wind_direction_10m, wind_gusts_10m,
+# surface_pressure, cloud_cover) are selected but not yet used downstream --
+# extend the join and FST output here when ready.
 
 	query <- "
-	-- Get hourly wind speed
-	WITH wind_hourly AS (
-	  SELECT 
-		strftime('%Y-%m-%d %H:00:00', datetime(time, 'unixepoch')) AS hour,
-		AVG(value) AS avg_windspeed
-	  FROM windSpeed
-	  WHERE 
-		time >= strftime('%s', ?) AND
-		time <= strftime('%s', ?) AND
-		strftime('%S', datetime(time, 'unixepoch')) != '00'
-	  GROUP BY hour
-	),
-	-- Get hourly temperature
-	temp_hourly AS (
-	  SELECT 
-		strftime('%Y-%m-%d %H:00:00', datetime(time, 'unixepoch')) AS hour,
-		AVG(value) AS avg_temperature
-	  FROM outdoorTemperature
-	  WHERE 
-		time >= strftime('%s', ?) AND
-		time <= strftime('%s', ?) AND
-		strftime('%S', datetime(time, 'unixepoch')) != '00'
-	  GROUP BY hour
-	)
-	
-	-- Join the two hourly tables
-	SELECT 
-	  w.hour,
-	  w.avg_windspeed,
-	  t.avg_temperature
-	FROM wind_hourly w
-	LEFT JOIN temp_hourly t ON w.hour = t.hour
-	ORDER BY w.hour;
+	SELECT
+	  hour,
+	  wind_speed_10m                   AS avg_windspeed,
+	  (temperature_2m * 9.0/5.0 + 32)  AS avg_temperature,
+	  precipitation                    AS precipitation,
+	  wind_direction_10m               AS wind_direction,
+	  wind_gusts_10m                   AS wind_gusts,
+	  surface_pressure                 AS surface_pressure,
+	  cloud_cover                      AS cloud_cover
+	FROM open_metro_weather_hourly
+	WHERE hour >= ?
+	  AND hour <= ?
+	ORDER BY hour;
 	"
 
-# Execute query with parameters in correct order
-
 	hourly_avg <- dbGetQuery(con, query, params = list(
-	  start_date, end_date,  # for wind_hourly
-	  start_date, end_date   # for temp_hourly
+	  paste0(start_date, "T00:00"),
+	  paste0(end_date,   "T23:00")
 	))
 
 # Disconnect from the database
@@ -365,7 +419,7 @@
 #####################################
 
 	all_data$Date.Time <- as.POSIXct(all_data$Date.Time, tz = "UTC")
-	hourly_avg$hour <- as.POSIXct(hourly_avg$hour, tz = "UTC")
+	hourly_avg$hour    <- as.POSIXct(hourly_avg$hour, format = "%Y-%m-%dT%H:%M", tz = "UTC")
 
 # Add row IDs to preserve rows during join
 

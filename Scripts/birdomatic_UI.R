@@ -57,11 +57,59 @@ audio_filepath <- "/Volumes/Bio/"
 # Tiny Shiny path in the form "http://tiny.pgbwb.com/?"
 tiny_shiny <- "https://tiny.pgbwb.com/?"
 
-# File path to SQL weather database
-weather_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/weather_snoop_valley_weather/valley.weather.db"
+# File path to SQL weather database (switching to open-metro weather)
+# weather_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/weather_snoop_valley_weather/valley.weather.db"
+weather_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/Weather_data/Test/open_metro_weather.db"
+
+##############################################
+# File Score Calculation Weights             #
+# Adjust these to tune the scoring algorithm #
+##############################################
+
+# Weights are relative to each other - only the ratios matter.
+# Current intent: low wind speed is the dominant factor,
+# unique species count second, confidence least.
+# Recalibrate after observing score distributions with clean Open-Metro wind data.
+
+w_unique_species <- 3  # Number of unique species in the file
+w_confidence     <- 2  # Mean confidence of identifications
+w_wind           <- 5  # Low wind speed (inverted - lower wind = higher score)
 
 
-footer_text <- p("This project is powered by ",
+##############################################
+# Full-Dataset File Score Reference Frame    #
+# Percent ranks calculated against all_data  #
+# so scores don't shift with sidebar filters #
+##############################################
+
+# Collapse all observations to one row per file with pre-calculated
+# percent ranks and score. Doing this at startup against the full
+# dataset means scores are stable properties of each file and don't
+# change when sidebar filters are applied.
+
+file_score_ref <- all_data %>%
+  group_by(Begin.Path) %>%
+  summarise(
+    ref_unique_species  = n_distinct(Common.Name),
+    ref_mean_confidence = mean(as.numeric(Confidence), na.rm = TRUE),
+    ref_avg_windspeed   = mean(avg_windspeed, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    pct_unique_species = percent_rank(ref_unique_species),
+    pct_confidence     = percent_rank(ref_mean_confidence),
+    pct_windspeed      = 1 - percent_rank(ref_avg_windspeed)
+  ) %>%
+  mutate(
+    Score = (
+      (pct_unique_species * w_unique_species) +
+      (pct_confidence     * w_confidence)     +
+      (pct_windspeed      * w_wind)
+    ) / (w_unique_species + w_confidence + w_wind)
+  ) %>%
+  select(Begin.Path, pct_unique_species, pct_confidence, pct_windspeed, Score)
+
+footer_text <- p("Test Version: This project is powered by ",
                  tags$a("BirdNET Analyzer", href = "https://github.com/birdnet-team/BirdNET-Analyzer", target = "_blank"),
                  ", ",
                  tags$a("the R Project", href = "https://www.r-project.org/", target = "_blank"), 
@@ -1333,36 +1381,48 @@ server <- function(input, output, session) {
     cached_filtered_data(filtered)
   }, ignoreNULL = FALSE)
   
-  # Optimized pivot creator
-  create_pivot_files <- function(df) {
-    
+  ##############################################
+  # FUNCTION: CREATE PIVOT FILES               #
+  ##############################################
+  #
+  # Collapses the observation-level data (one row per BirdNET detection)
+  # down to one row per audio file for display in the Audio File Overview
+  # table.
+  #
+  # For each file computes:
+  #   - Number of observations and unique species
+  #   - Mean, median and SD of confidence scores
+  #   - Time and time-of-day classification
+  #   - Audio playback button (if file is accessible)
+  #   - File quality score (joined from file_score_ref, calculated at
+  #     startup against full dataset so scores don't shift with filters)
+  #   - Score color band for table display
+  #
+  # Input:  filtered observation-level data frame (cached_filtered_data)
+  # Output: one-row-per-file data frame for DT table rendering
+  #
+  # Score weights are parameterized at the top of the script:
+  #   w_unique_species, w_confidence, w_wind
+
+create_pivot_files <- function(df) {
+
     find_audio_file_full <- function(row) {
       if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
         return(NULL)
       }
-      
       file_name <- basename(row[["Begin.Path"]])
-      year <- year(row[["Date"]])
-      file_loc <- paste0(audio_filepath, "Bio ", as.character(year), "/From Recorders")
-      
-      audio_loc <- file.path(file_loc, file_name)
-      
-      if (is.null(audio_loc) || audio_loc == "" || !file.exists(audio_loc)) {
-        return(NULL)
-      }
-      
-      return(audio_loc)
+      yr <- as.character(year(row[["Date"]]))
+      return(file.path(paste0(audio_filepath, "Bio ", yr, "/From Recorders"), file_name))
     }
-    
-    # Step 3: Add overall metrics
+
     df_all_cols <- df %>%
       group_by(Begin.Path, Location, Date, Date.Time, avg_temperature, avg_windspeed) %>%
       summarise(
-        Number.Observations = n(),
-        Number.Unique.Species = n_distinct(Common.Name),
-        Mean.Confidence = as.numeric(format(round(mean(as.numeric(Confidence)), 4), nsmall = 4 )),
-        Median.Confidence = as.numeric(format(round(median(as.numeric(Confidence)), 4), nsmall = 4)),
-        SD.Confidence = if (n()>1) as.numeric(format(round(sd(as.numeric(Confidence)), 4), nsmall = 4)) else 0,
+        Number.Observations    = n(),
+        Number.Unique.Species  = n_distinct(Common.Name),
+        Mean.Confidence        = as.numeric(format(round(mean(as.numeric(Confidence)), 4), nsmall = 4)),
+        Median.Confidence      = as.numeric(format(round(median(as.numeric(Confidence)), 4), nsmall = 4)),
+        SD.Confidence          = if (n()>1) as.numeric(format(round(sd(as.numeric(Confidence)), 4), nsmall = 4)) else 0,
         .groups = "drop"
       ) %>%
       mutate(Time = as_hms(Date.Time)) %>%
@@ -1372,9 +1432,8 @@ server <- function(input, output, session) {
         Time > hms(0, 30, 11) ~ "Night"
       )) %>%
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
-      mutate(Year = as.character(lubridate::year(Date))) %>%
+      mutate(Year  = as.character(lubridate::year(Date))) %>%
       mutate(Month = as.character(lubridate::month(Date, label = TRUE, abbr = FALSE))) %>%
-      # left_join(top_species_df, by = "Begin.Path") %>%
       rowwise() %>%
       mutate(Play.Audio = {
         audio_id <- find_audio_file_full(pick(everything()))
@@ -1388,39 +1447,42 @@ server <- function(input, output, session) {
         } else {
           "No Audio File"
         }
-      }) 
+      }) %>%
+      ungroup()
 
-    df_all_cols$Number.Observations.Pct = percent_rank(df_all_cols$Number.Observations)
-    df_all_cols$Windspeed.Pct = 1 - percent_rank(df_all_cols$avg_windspeed)
-    df_all_cols$Confidence.Pct = percent_rank(df_all_cols$Mean.Confidence)
-    
+    # Join pre-calculated scores from full-dataset reference frame.
+    # Scores are stable and don't shift when sidebar filters change.
+
     df_all_cols <- df_all_cols %>%
-      mutate(Score = case_when(
-        is.na(avg_windspeed) ~ (Number.Observations.Pct + Confidence.Pct + 0.5) / 3,
-        !is.null(avg_windspeed) ~ (Number.Observations.Pct + Windspeed.Pct + Confidence.Pct) / 3
-      )) %>%
-      mutate_if(is.numeric, round, 3) 
-      
+      left_join(file_score_ref %>% select(Begin.Path, Score), by = "Begin.Path")
+
+    # Score color bands - thresholds applied to the pre-calculated Score.
+    # Score_Pct is retained for potential future use.
+
     df_all_cols <- df_all_cols %>%
-      mutate(Score_Pct = percent_rank(Score),
-             Score_Color = case_when(
-               Score >= 0.9 ~ "#007bc2",
-               Score >= 0.8 & Score < 0.9 ~ "#358aca",  
-               Score >= 0.7 & Score < 0.8 ~ "#5399d1",  
-               Score >= 0.6 & Score < 0.7 ~ "#6da7d8",  
-               Score >= 0.5 & Score < 0.6 ~ "#86b6df", 
-               Score >= 0.4 & Score < 0.5 ~ "#9ec5e6",
-               Score >= 0.3 & Score < 0.4 ~ "#b6d3ed",
-               Score >= 0.2 & Score < 0.3 ~ "#cee2f3",
-               Score >= 0.1 & Score < 0.2 ~ "#e7f0f9",
-               Score < 0.1 ~ "#ffffff"               
-             ))
+      mutate(
+        Score_Pct   = percent_rank(Score),
+        Score_Color = case_when(
+          Score >= 0.9                  ~ "#007bc2",
+          Score >= 0.8 & Score < 0.9   ~ "#358aca",
+          Score >= 0.7 & Score < 0.8   ~ "#5399d1",
+          Score >= 0.6 & Score < 0.7   ~ "#6da7d8",
+          Score >= 0.5 & Score < 0.6   ~ "#86b6df",
+          Score >= 0.4 & Score < 0.5   ~ "#9ec5e6",
+          Score >= 0.3 & Score < 0.4   ~ "#b6d3ed",
+          Score >= 0.2 & Score < 0.3   ~ "#cee2f3",
+          Score >= 0.1 & Score < 0.2   ~ "#e7f0f9",
+          Score < 0.1                  ~ "#ffffff"
+        )
+      ) %>%
+      mutate_if(is.numeric, round, 3)
+
     df_all_cols$row_index <- seq_len(nrow(df_all_cols))
+
     df_all_cols <- df_all_cols %>%
-      select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species, 
-             Location, Date, Year, Month, Time, Time.Of.Day, 
+      select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species,
+             Location, Date, Year, Month, Time, Time.Of.Day,
              Mean.Confidence, avg_temperature, avg_windspeed,
-             # Top.Species.1, 
              Score, Score_Color, row_index)
 
     return(df_all_cols)
@@ -1683,24 +1745,27 @@ server <- function(input, output, session) {
       
       # Connect to SQLite database
       con <- dbConnect(RSQLite::SQLite(), weather_path)
-      
-      wind_query <- "
+
+# Revised to use open-metro weather database
+wind_query <- "
     SELECT
-      value AS windspeed,
-      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
-    FROM windSpeed
-    WHERE
-      time >= ? AND
-      time < ?
+      wind_speed_10m AS windspeed,
+      hour AS time
+    FROM open_metro_weather_hourly
+    WHERE hour >= ?
+      AND hour <= ?
+    ORDER BY hour
   "
       
-      wind <- dbGetQuery(con, wind_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+      wind <- dbGetQuery(con, wind_query, params = list(
+        format(plot_time_start, "%Y-%m-%dT%H:%M"),
+        format(plot_time_end,   "%Y-%m-%dT%H:%M")
+      ))
       dbDisconnect(con)
       
-      # Convert time back to POSIXct for ggplot
-      wind$time <- as.POSIXct(wind$time, tz = "UTC")
-      wind <- wind[format(as.POSIXct(wind$time), "%S") != "00",]
-      
+      # Convert time to POSIXct for ggplot
+      wind$time <- as.POSIXct(wind$time, format = "%Y-%m-%dT%H:%M", tz = "UTC")
+       
       # define region of audio file for plotting
       regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
       
@@ -1739,21 +1804,25 @@ server <- function(input, output, session) {
       # Connect to SQLite database
       con <- dbConnect(RSQLite::SQLite(), weather_path)
       
-      temp_query <- "
+# Revised to use open-metro weather database
+
+temp_query <- "
     SELECT
-      value AS temp,
-      strftime('%Y-%m-%d %H:%M:%S', datetime(time, 'unixepoch')) AS time
-    FROM outdoorTemperature
-    WHERE 
-      time >= ? AND
-      time < ?
-    "
-      temp <- dbGetQuery(con, temp_query, params = list(as.numeric(plot_time_start), as.numeric(plot_time_end)))
+      temperature_2m AS temp,
+      hour AS time
+    FROM open_metro_weather_hourly
+    WHERE hour >= ?
+      AND hour <= ?
+    ORDER BY hour
+  "
+      temp <- dbGetQuery(con, temp_query, params = list(
+        format(plot_time_start, "%Y-%m-%dT%H:%M"),
+        format(plot_time_end,   "%Y-%m-%dT%H:%M")
+      ))
       dbDisconnect(con)
       
-      # Convert time back to POSIXct for ggplot
-      temp$time <- as.POSIXct(temp$time, tz = "UTC")
-      temp <- temp[format(as.POSIXct(temp$time), "%S") != "00",]
+      # Convert time to POSIXct for ggplot
+      temp$time <- as.POSIXct(temp$time, format = "%Y-%m-%dT%H:%M", tz = "UTC") 
       
       # define region of audio file for plotting
       regions <- tibble(x1 = date_time_start, x2 = date_time_end, y1 = -Inf, y2 = Inf)
