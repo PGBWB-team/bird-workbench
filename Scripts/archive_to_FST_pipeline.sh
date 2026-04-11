@@ -16,7 +16,8 @@ main() {
 	# This section runs the functions in sequence.  Toggle comments for run-control
 	 
 	# 	run_BirdNET_script
-	 	run_file_combiner
+	#	run_file_combiner
+	#	fetch_weather_data
 		regen_FST_files
 	#   copy_new_FST_to_UI_input_target -- placeholder
 	
@@ -156,9 +157,18 @@ set -e
 		SPECIES_LIST_FILE_PATH="$BASE_DIR/Species_Lists/Test/Prairie_Haven_species_list_all_test.txt"
 
 	
-# Weather database
+# Weather database (legacy - local weather stations, retained for reference)
 
 	WEATHER_DB_PATH="$BASE_DIR/weather_snoop_valley_weather/valley.weather.db"
+
+# Open-Metro weather data directory (modify Test/Production to match other base dirs above)
+
+	WEATHER_DATA_BASE="$BASE_DIR/Weather_data/Test"
+
+# Open-Metro weather database and flat file paths (derived from WEATHER_DATA_BASE)
+
+	OPEN_METRO_WEATHER_DB_PATH="$WEATHER_DATA_BASE/open_metro_weather.db"
+	OPEN_METRO_WEATHER_TXT_PATH="$WEATHER_DATA_BASE/open_metro_weather_data.txt"
 
 # Scripts
 
@@ -214,7 +224,6 @@ EOF
 	echo "PRE-RUN REMINDERS"
 	echo " "
 	
-	echo "Updated the weather database?"
 	echo "Verified that run-control is set correctly?"
 	echo "Have you SAVED the script file with the new run-control information?"
 	echo " "
@@ -332,6 +341,7 @@ EOF
 	mkdir -p "$COMBINER_LOG_DIR"
 	mkdir -p "$FST_LOG_DIR"
 	mkdir -p "$ARCHIVE_DIR"
+	mkdir -p "$WEATHER_DATA_BASE"
 
 # Derived variables for this run
 
@@ -654,6 +664,238 @@ EOF
 	}
 	
 ######################################################
+# FUNCTION: FETCH OPEN-METRO WEATHER DATA           #
+######################################################
+
+# Fetches hourly weather data from the Open-Metro Historical Weather API
+# and stores it in a local SQLite database for use by regenerate_FST.R.
+#
+# This replaces the manual process of copying data from local weather stations
+# (which were unreliable and gap-prone) into valley.weather.db.
+#
+# API: https://open-meteo.com/en/docs/historical-weather-api
+# Free for non-commercial use; no API key required.
+#
+# Variables fetched (stored in table: open_metro_weather_hourly):
+#   temperature_2m      - Air temperature at 2m (°C)
+#   precipitation       - Total precipitation, preceding hour sum (mm)
+#   wind_speed_10m      - Wind speed at 10m (mph)
+#   wind_direction_10m  - Wind direction at 10m (degrees)
+#   wind_gusts_10m      - Wind gusts at 10m (mph)
+#   surface_pressure    - Atmospheric pressure at surface (hPa)
+#   cloud_cover         - Total cloud cover (%)
+#
+# Behavior:
+#   - Fetches the FULL date range (first_year through selected_year) in a
+#     single API call regardless of mode. At ~8,760 rows/year this is a
+#     trivially small request even across 10+ years of data.
+#   - Drops and recreates the table on every run -- no partial updates,
+#     no existence checks, no year-by-year looping.
+#   - Always writes both the SQLite DB and a flat txt file for debugging.
+#
+# Output files (both written to WEATHER_DATA_BASE):
+#   open_metro_weather.db        - SQLite database (authoritative full record;
+#                                  accumulates across all runs)
+#   open_metro_weather_data.txt  - Tab-delimited flat file for debugging.
+#                                  NOTE: This file reflects ONLY the date range
+#                                  of the most recent run. It is overwritten each
+#                                  time fetch_weather_data runs. If you need all
+#                                  years in the txt file, run with first_year and
+#                                  selected_year spanning the full range. The DB
+#                                  is the authoritative record across all runs.
+#
+# Coordinates: $LAT, $LON (shared with BirdNET species filtering)
+# Logging: appended to $FST_LOG
+
+	fetch_weather_data() {
+
+		print_blank_lines 2
+		echo "============================================"
+		echo "STARTING OPEN-METRO WEATHER FETCH"
+		echo "============================================"
+		echo "Mode:        $mode"
+		echo "Date range:  ${first_year}-01-01 through ${selected_year}-12-31"
+		echo "DB:          $OPEN_METRO_WEATHER_DB_PATH"
+		echo "Flat file:   $OPEN_METRO_WEATHER_TXT_PATH"
+		echo "Latitude:    $LAT"
+		echo "Longitude:   $LON"
+		echo "Log:         $FST_LOG"
+		echo "============================================"
+		print_blank_lines 1
+
+		# Verify curl is available
+
+			if ! command -v curl &> /dev/null; then
+				echo "ERROR: curl is required but not found"
+				exit 1
+			fi
+
+		# Verify sqlite3 is available
+
+			if ! command -v sqlite3 &> /dev/null; then
+				echo "ERROR: sqlite3 is required but not found"
+				exit 1
+			fi
+
+		# Verify python3 is available
+
+			if ! command -v python3 &> /dev/null; then
+				echo "ERROR: python3 is required but not found"
+				exit 1
+			fi
+
+		# Drop and recreate the table (full replace on every run)
+
+			echo "Recreating open_metro_weather_hourly table..."
+			sqlite3 "$OPEN_METRO_WEATHER_DB_PATH" "
+				DROP TABLE IF EXISTS open_metro_weather_hourly;
+				CREATE TABLE open_metro_weather_hourly (
+					hour                TEXT PRIMARY KEY,
+					temperature_2m      REAL,
+					precipitation       REAL,
+					wind_speed_10m      REAL,
+					wind_direction_10m  REAL,
+					wind_gusts_10m      REAL,
+					surface_pressure    REAL,
+					cloud_cover         REAL
+				);
+			"
+
+		# Cap end date at today to avoid rejections from the historical API
+			local today
+			today=$(date '+%Y-%m-%d')
+			local fetch_end
+			if [[ "${selected_year}-12-31" > "$today" ]]; then
+			    fetch_end="$today"
+			else
+			    fetch_end="${selected_year}-12-31"
+			fi
+		
+		# Build API URL - single call covering full year range
+
+			local api_url="https://archive-api.open-meteo.com/v1/archive"
+			local api_params="latitude=${LAT}&longitude=${LON}"
+			api_params+="&start_date=${first_year}-01-01&end_date=${fetch_end}"
+			api_params+="&hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure,cloud_cover"
+			api_params+="&temperature_unit=celsius"
+			api_params+="&wind_speed_unit=mph"
+			api_params+="&timezone=UTC"
+
+			local full_url="${api_url}?${api_params}"
+
+		# Fetch from API into a temp file
+
+			local tmp_json
+			tmp_json=$(mktemp /tmp/open_metro_weather_XXXXXX.json)
+
+			echo "Calling Open-Metro API..."
+			echo "URL: $full_url"
+
+			local http_status
+			http_status=$(curl -s -w "%{http_code}" -o "$tmp_json" "$full_url")
+
+			if [[ "$http_status" != "200" ]]; then
+				echo "ERROR: Open-Metro API returned HTTP $http_status"
+				rm -f "$tmp_json"
+				exit 1
+			fi
+
+		# Check for API-level error in the JSON response
+
+			if grep -q '"error":true' "$tmp_json"; then
+				local api_reason
+				api_reason=$(grep -o '"reason":"[^"]*"' "$tmp_json" | head -1)
+				echo "ERROR: Open-Metro API error: $api_reason"
+				rm -f "$tmp_json"
+				exit 1
+			fi
+
+		# Parse JSON, insert into SQLite, and write tab-delimited txt file
+
+			echo "Parsing response and writing to DB and flat file..."
+
+			python3 - "$tmp_json" "$OPEN_METRO_WEATHER_DB_PATH" "$OPEN_METRO_WEATHER_TXT_PATH" << 'PYEOF'
+import sys
+import json
+import sqlite3
+
+json_path = sys.argv[1]
+db_path   = sys.argv[2]
+txt_path  = sys.argv[3]
+
+with open(json_path) as f:
+    data = json.load(f)
+
+hourly = data.get("hourly", {})
+times  = hourly.get("time",               [])
+temp   = hourly.get("temperature_2m",     [])
+precip = hourly.get("precipitation",      [])
+wspd   = hourly.get("wind_speed_10m",     [])
+wdir   = hourly.get("wind_direction_10m", [])
+wgst   = hourly.get("wind_gusts_10m",     [])
+pres   = hourly.get("surface_pressure",   [])
+cloud  = hourly.get("cloud_cover",        [])
+
+rows = list(zip(times, temp, precip, wspd, wdir, wgst, pres, cloud))
+
+# Write to SQLite
+
+con = sqlite3.connect(db_path)
+cur = con.cursor()
+cur.executemany(
+    """INSERT OR REPLACE INTO open_metro_weather_hourly
+       (hour, temperature_2m, precipitation,
+        wind_speed_10m, wind_direction_10m, wind_gusts_10m,
+        surface_pressure, cloud_cover)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+    rows
+)
+con.commit()
+con.close()
+
+# Write to tab-delimited flat file (debugging convenience)
+# Note: reflects only the date range of this run - see script header comments
+
+header = "\t".join([
+    "hour", "temperature_2m", "precipitation",
+    "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m",
+    "surface_pressure", "cloud_cover"
+])
+
+with open(txt_path, "w") as f:
+    f.write(header + "\n")
+    for row in rows:
+        f.write("\t".join(["" if v is None else str(v) for v in row]) + "\n")
+
+print(f"  Inserted {len(rows)} rows into DB")
+print(f"  Wrote {len(rows)} rows to flat file")
+if times:
+    print(f"  Date range in response: {times[0]} through {times[-1]}")
+PYEOF
+
+			local py_exit=$?
+			rm -f "$tmp_json"
+
+			if [[ $py_exit -ne 0 ]]; then
+				echo "ERROR: Failed to parse/write weather data"
+				exit 1
+			fi
+
+		# Confirm final row count in DB
+
+			local total_rows
+			total_rows=$(sqlite3 "$OPEN_METRO_WEATHER_DB_PATH" \
+				"SELECT COUNT(*) FROM open_metro_weather_hourly;")
+			echo "DB total rows: $total_rows"
+			echo "Flat file:     $OPEN_METRO_WEATHER_TXT_PATH"
+
+		print_blank_lines 2
+		echo "============================================"
+		echo "OPEN-METRO WEATHER FETCH COMPLETE"
+		echo "============================================"
+	}
+
+######################################################
 # FUNCTION: REGENERATE ANNUAL AND COMBINED FST FILES #
 ######################################################
 
@@ -673,7 +915,7 @@ EOF
 #   single_year_additions/replacement - Regenerate single_year_YYYY.fst for selected_year, then PASS 2
 #   all_years_replacement              - Regenerate all single_year_YYYY.fst files, then PASS 2
 #
-# Input:  single_year_YYYY.txt files, weather database
+# Input:  single_year_YYYY.txt files, Open-Meteo weather database
 # Output: single_year_YYYY.fst files, all_years.fst
 #
 # Calls: regen_FST.R
@@ -791,7 +1033,7 @@ EOF
 					single_year_fst_output="$output_fst" \
 					yearly_fst_paths="$YEARLY_FST_PATHS" \
 					all_years_fst_output="$ALL_YEARS_FST_OUTPUT" \
-					weather_path="$WEATHER_DB_PATH" \
+					weather_path="$OPEN_METRO_WEATHER_DB_PATH" \
 					start_date="$weather_start" \
 					end_date="$weather_end" \
 					first_year="$first_year" \
@@ -825,7 +1067,7 @@ EOF
 				single_year_fst_output="$SINGLE_YEAR_FST_OUTPUT" \
 				yearly_fst_paths="$YEARLY_FST_PATHS" \
 				all_years_fst_output="$ALL_YEARS_FST_OUTPUT" \
-				weather_path="$WEATHER_DB_PATH" \
+				weather_path="$OPEN_METRO_WEATHER_DB_PATH" \
 				start_date="$WEATHER_START_DATE" \
 				end_date="$WEATHER_END_DATE" \
 				first_year="$first_year" \
