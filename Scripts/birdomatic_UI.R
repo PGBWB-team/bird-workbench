@@ -91,7 +91,7 @@ file_score_ref <- all_data %>%
   group_by(Begin.Path) %>%
   summarise(
     ref_unique_species  = n_distinct(Common.Name),
-    ref_mean_confidence = mean(as.numeric(Confidence), na.rm = TRUE),
+    ref_mean_confidence = mean(Confidence, na.rm = TRUE),
     ref_avg_windspeed   = mean(avg_windspeed, na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -991,7 +991,7 @@ server <- function(input, output, session) {
   confidence_filter <- function(data, conf) {
     min_conf <- conf[1]
     max_conf <- conf[2]
-    data <- subset(data, as.numeric(Confidence) >= min_conf & as.numeric(Confidence) <= max_conf)
+    data <- subset(data, Confidence >= min_conf & Confidence <= max_conf)
     return(data)
   } 
   
@@ -1420,9 +1420,9 @@ create_pivot_files <- function(df) {
       summarise(
         Number.Observations    = n(),
         Number.Unique.Species  = n_distinct(Common.Name),
-        Mean.Confidence        = as.numeric(format(round(mean(as.numeric(Confidence)), 4), nsmall = 4)),
-        Median.Confidence      = as.numeric(format(round(median(as.numeric(Confidence)), 4), nsmall = 4)),
-        SD.Confidence          = if (n()>1) as.numeric(format(round(sd(as.numeric(Confidence)), 4), nsmall = 4)) else 0,
+		Mean.Confidence   = as.numeric(format(round(mean(Confidence), 4), nsmall = 4)),
+		Median.Confidence = as.numeric(format(round(median(Confidence), 4), nsmall = 4)),
+		SD.Confidence     = if (n()>1) as.numeric(format(round(sd(Confidence), 4), nsmall = 4)) else 0,
         .groups = "drop"
       ) %>%
       mutate(Time = as_hms(Date.Time)) %>%
@@ -2154,8 +2154,8 @@ temp_query <- "
           ungroup()
         
         complete_data <- subset(complete_data,
-                                as.numeric(Confidence) >= min_conf &
-                                  as.numeric(Confidence) <= max_conf)
+          (Confidence) >= min_conf &
+          (Confidence) <= max_conf)
         
         count_data_week <- complete_data %>%
           group_by(Week.Year.Loc) %>%
@@ -2373,18 +2373,18 @@ temp_query <- "
       if (!is.null(selected_data())) {
         if (input$time_interval == "weekly") {
           out_df <- subset(complete_data, (Week.Year.Loc %in% selected_data()$key & 
-                                             as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
-                                                                                          "Confidence", "Location", "Begin.Path", "Species.Code", 
-                                                                                          "Date", "Common.Name", "Obs.Time", "avg_windspeed", "avg_temperature"))
+            (Confidence)>=min_conf & 
+            (Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
+              "Confidence", "Location", "Begin.Path", "Species.Code", 
+              "Date", "Common.Name", "Obs.Time", "avg_windspeed", "avg_temperature"))
         }
         
         if (input$time_interval == "monthly") {
           out_df <- subset(complete_data, (Month.Year.Loc %in% selected_data()$key & 
-                                             as.numeric(Confidence)>=min_conf & 
-                                             as.numeric(Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
-                                                                                          "Confidence", "Location", "Begin.Path", "Species.Code", 
-                                                                                          "Date", "Common.Name", "Obs.Time", "avg_windspeed", "avg_temperature"))
+            (Confidence)>=min_conf & 
+            (Confidence)<= max_conf), select=c("Begin.Time..s.", "End.Time..s.", "Week", 
+            "Confidence", "Location", "Begin.Path", "Species.Code", 
+            "Date", "Common.Name", "Obs.Time", "avg_windspeed", "avg_temperature"))
         }
         
         # Add action buttons for opening the website

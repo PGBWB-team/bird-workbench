@@ -451,8 +451,16 @@
 	cat("PASS 1: Writing single-year FST file\n")
 	cat("========================================\n")
 	
+	# Enforce correct column types before writing.
+	# Confidence is read as character by read.table (colClasses="character")
+	# and converted to numeric early in the pipeline, but we enforce it
+	# here explicitly so the FST stores a numeric column and downstream
+	# consumers (birdomatic_UI.R) don't need repeated as.numeric() coercions.
+
+		closest_match$Confidence <- as.numeric(closest_match$Confidence)
+
 	# Save as a single-year .FST file
-	
+
 		write_fst(closest_match, single_year_fst_output)
 	
 	# Report results
