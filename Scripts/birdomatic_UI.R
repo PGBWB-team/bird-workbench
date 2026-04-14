@@ -27,7 +27,7 @@ library(RSQLite)
 
 # Set path the Combined_FST file containing bird-IDs and associated data
 
-input_file_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/Results_files/Test/birdnet_analyzer_run_files_combined_FST/all_years.fst"
+input_file_path <- "/Users/mikeoconnor/Documents/BirdWorkbench/Results_files/Production/birdnet_analyzer_run_files_combined_FST/all_years.fst"
 
 # Reading in all data:
 
@@ -1406,15 +1406,6 @@ server <- function(input, output, session) {
 
 create_pivot_files <- function(df) {
 
-    find_audio_file_full <- function(row) {
-      if (is.null(row[["Begin.Path"]]) || row[["Begin.Path"]] == "") {
-        return(NULL)
-      }
-      file_name <- basename(row[["Begin.Path"]])
-      yr <- as.character(year(row[["Date"]]))
-      return(file.path(paste0(audio_filepath, "Bio ", yr, "/From Recorders"), file_name))
-    }
-
     df_all_cols <- df %>%
       group_by(Begin.Path, Location, Date, Date.Time, avg_temperature, avg_windspeed) %>%
       summarise(
@@ -1434,21 +1425,13 @@ create_pivot_files <- function(df) {
       mutate(Time.Of.Day = as.character(Time.Of.Day)) %>%
       mutate(Year  = as.character(lubridate::year(Date))) %>%
       mutate(Month = as.character(lubridate::month(Date, label = TRUE, abbr = FALSE))) %>%
-      rowwise() %>%
-      mutate(Play.Audio = {
-        audio_id <- find_audio_file_full(pick(everything()))
-        if (!is.null(audio_id)) {
-          as.character(shinyInput(
-            FUN = actionButton,
-            id = audio_id,
-            label = "Audio",
-            onclick = 'Shiny.setInputValue(\"stream_audio\", this.id, {priority: \"event\"})'
-          ))
-        } else {
-          "No Audio File"
-        }
-      }) %>%
-      ungroup()
+      mutate(
+        Audio.Path = file.path(
+          paste0(audio_filepath, "Bio ", Year, "/From Recorders"),
+          basename(Begin.Path)
+        )
+      )
+
 
     # Join pre-calculated scores from full-dataset reference frame.
     # Scores are stable and don't shift when sidebar filters change.
@@ -1480,7 +1463,8 @@ create_pivot_files <- function(df) {
     df_all_cols$row_index <- seq_len(nrow(df_all_cols))
 
     df_all_cols <- df_all_cols %>%
-      select(Play.Audio, Begin.Path, Number.Observations, Number.Unique.Species,
+      mutate(Play.Audio = "") %>%
+      select(Play.Audio, Audio.Path, Begin.Path, Number.Observations, Number.Unique.Species,
              Location, Date, Year, Month, Time, Time.Of.Day,
              Mean.Confidence, avg_temperature, avg_windspeed,
              Score, Score_Color, row_index)
@@ -1523,7 +1507,28 @@ create_pivot_files <- function(df) {
                 fixedHeader = list(header = TRUE),
                 scrollY = 500,
                 scrollX = TRUE,
-                columnDefs = list(list(visible=FALSE, targets= c("Score_Color", "row_index"))),
+                columnDefs = list(list(visible=FALSE, targets= c("Audio.Path", "Score_Color", "row_index"))),
+                drawCallback = JS(
+                  "function(settings) {",
+                  "  var api = this.api();",
+                  "  api.rows({page: 'current'}).every(function() {",
+                  "    var data = this.data();",
+                  "    var audioPath = data[1];",
+                  "    var node = this.node();",
+                  "    var cell = $(node).find('td').eq(0);",
+                  "    if (audioPath && audioPath !== '') {",
+                  "      var btn = $('<button class=\"btn btn-xs btn-default\">Audio</button>');",
+                  "      btn.data('path', audioPath);",
+                  "      btn.on('click', function() {",
+                  "        Shiny.setInputValue('stream_audio', $(this).data('path'), {priority: 'event'});",
+                  "      });",
+                  "      cell.html('').append(btn);",
+                  "    } else {",
+                  "      cell.html('No Audio File');",
+                  "    }",
+                  "  });",
+                  "}"
+                ),           
                 # Add custom CSS for styling
                 initComplete = JS(
                   "function(settings, json) {",
